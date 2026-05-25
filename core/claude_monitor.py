@@ -9,7 +9,7 @@ claude_monitor.py — Claude Code 自动调用守护进程
   pythonw claude_monitor.py         # 后台运行（无窗口，Windows）
 
 停止：Ctrl+C 或结束进程
-日志：C:/Users/Violet/.claude/yukibot/monitor.log
+日志：<项目根目录>/monitor.log
 """
 
 import json
@@ -39,7 +39,7 @@ PENDING_TICK  = DATA / "pending_tick.json"
 # claude CLI：优先从 PATH 查找，再试常见安装位置
 _CLAUDE_CANDIDATES = [
     "claude",
-    r"C:\Users\Violet\AppData\Roaming\npm\claude.cmd",
+    str(Path.home() / "AppData" / "Roaming" / "npm" / "claude.cmd"),
     r"C:\Users\Public\AppData\Roaming\npm\claude.cmd",
 ]
 CLAUDE_CMD = next(
