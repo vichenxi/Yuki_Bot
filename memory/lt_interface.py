@@ -23,7 +23,7 @@ from datetime import datetime
 def get_life_context(date: str) -> dict:
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT ts, activity, mood, should_message, message_type, message_seed, sleeping, offline "
+            "SELECT ts, activity, mood, mood_intensity, emotional_note, should_message, message_type, message_seed, sleeping, offline "
             "FROM life_logs WHERE date=? ORDER BY ts",
             (date,),
         ).fetchall()
@@ -40,14 +40,19 @@ def get_life_context(date: str) -> dict:
 
 def add_life_log(entry: dict):
     date = entry.get("ts", now8())[:10]
+    intensity = entry.get("mood_intensity", None)
+    if intensity is not None:
+        intensity = float(intensity)
     with get_db() as conn:
         conn.execute(
-            "INSERT INTO life_logs(ts,activity,mood,should_message,message_type,message_seed,sleeping,offline,date) "
-            "VALUES(?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO life_logs(ts,activity,mood,mood_intensity,emotional_note,should_message,message_type,message_seed,sleeping,offline,date) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
             (
                 entry.get("ts", now8()),
                 entry.get("activity", ""),
                 entry.get("mood", "unknown"),
+                intensity,
+                entry.get("emotional_note", ""),
                 int(entry.get("should_message", False)),
                 entry.get("message_type", "none"),
                 entry.get("message_seed", ""),
