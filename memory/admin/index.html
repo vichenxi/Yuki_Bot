@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>雪 · Memory</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #0d0d0d; color: #e2e2e2; font-family: 'SF Pro Display', 'PingFang SC', sans-serif; }
+  .card { background: #141414; border: 1px solid #222; border-radius: 12px; }
+  .badge-hot  { background: #7f1d1d; color: #fca5a5; }
+  .badge-warm { background: #78350f; color: #fcd34d; }
+  .badge-cold { background: #1e293b; color: #94a3b8; }
+  .badge-perm { background: #14532d; color: #86efac; }
+  input, textarea, select { background: #1e1e1e; border: 1px solid #333; color: #e2e2e2; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: #555; }
+  .tab-active { border-bottom: 2px solid #a78bfa; color: #c4b5fd; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: #111; }
+  ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+
+  /* ── Status page ── */
+  #portrait-zone {
+    background: linear-gradient(170deg, #111 0%, #0a0a0a 100%);
+    transition: border-color 0.25s;
+  }
+  #portrait-zone:hover { border-color: #3a3a3a; }
+  #portrait-zone .portrait-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .lbl { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: #3a3a3a; margin-bottom: 5px; }
+  .id-section { border-bottom: 1px solid #181818; padding: 14px 20px; }
+  .id-section:last-child { border-bottom: none; }
+  .id-card { background: #0e0e0e; border: 1px solid #1e1e1e; border-radius: 16px; overflow: hidden; }
+  .id-card-header { background: #0a0a0f; border-bottom: 1px solid #181820; padding: 8px 20px;
+    display: flex; align-items: center; justify-content: space-between; }
+  @keyframes pulse-soft { 0%,100%{opacity:1} 50%{opacity:.35} }
+  .pulse { animation: pulse-soft 2s ease-in-out infinite; }
+  #mood-pill { transition: background 0.6s ease, border-color 0.6s ease, color 0.6s ease; }
+  #avatar-ring { transition: border-color 0.6s ease; }
+  #mood-big   { transition: color 0.6s ease; }
+</style>
+</head>
+<body class="min-h-screen">
+<div class="max-w-6xl mx-auto px-4 py-6">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-5">
+    <div>
+      <h1 class="text-lg font-semibold text-purple-300 tracking-wide">雪 · Memory</h1>
+      <p id="heat-summary" class="text-xs text-gray-700 mt-0.5">—</p>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="triggerDream()"  class="px-3 py-1.5 text-xs bg-indigo-950 hover:bg-indigo-900 text-indigo-300 rounded-lg">☽ Dream</button>
+      <button onclick="triggerDecay()" class="px-3 py-1.5 text-xs bg-gray-900  hover:bg-gray-800  text-gray-400  rounded-lg">⟳ 热度衰减</button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="flex gap-5 border-b border-gray-900 mb-5 text-sm text-gray-600">
+    <button class="pb-2 tab-active"      onclick="switchTab('status')">状态</button>
+    <button class="pb-2 hover:text-gray-300" onclick="switchTab('xun')">薰</button>
+    <button class="pb-2 hover:text-gray-300" onclick="switchTab('memories')">记忆库</button>
+    <button class="pb-2 hover:text-gray-300" onclick="switchTab('search')">搜索</button>
+    <button class="pb-2 hover:text-gray-300" onclick="switchTab('scenes')">Dream 场景</button>
+    <button class="pb-2 hover:text-gray-300" onclick="switchTab('calendar')">日历</button>
+    <button class="pb-2 hover:text-gray-300" onclick="switchTab('logs')">生活日志</button>
+    <button class="pb-2 hover:text-gray-300" onclick="switchTab('diary')">日记</button>
+    <button class="pb-2 hover:text-gray-300" onclick="switchTab('config')">配置</button>
+  </div>
+
+  <!-- ══ Status Tab ══ -->
+  <div id="tab-status">
+    <div class="flex gap-4" style="min-height:540px">
+
+      <!-- Left: portrait strip -->
+      <div id="portrait-zone"
+           class="shrink-0 relative rounded-2xl border-2 border-dashed border-gray-800 cursor-pointer overflow-hidden flex flex-col items-center justify-center"
+           style="width:190px"
+           onclick="document.getElementById('portrait-input').click()"
+           ondragover="event.preventDefault()"
+           ondrop="handlePortraitDrop(event)">
+        <img id="portrait-img" class="hidden absolute inset-0 w-full h-full object-cover object-top">
+        <div class="portrait-overlay"></div>
+        <div id="portrait-ph" class="flex flex-col items-center gap-3 px-6 text-center z-10 select-none">
+          <span style="font-size:48px;font-weight:100;color:#2a2a2a">雪</span>
+          <span class="text-xs leading-relaxed" style="color:#2e2e2e">点击或拖放<br>姐姐全身像</span>
+        </div>
+        <div id="portrait-name" class="hidden absolute bottom-0 left-0 right-0 p-4 z-10">
+          <div class="text-base font-light text-white">雪</div>
+          <div class="text-xs text-gray-400 mt-0.5">设计 · MFA II</div>
+        </div>
+        <input type="file" id="portrait-input" class="hidden" accept="image/*" onchange="handlePortraitFile(this)">
+      </div>
+
+      <!-- Right: student ID card -->
+      <div class="flex-1 flex flex-col min-w-0">
+        <div class="id-card flex-1 flex flex-col">
+
+          <!-- Card header -->
+          <div class="id-card-header">
+            <span style="font-size:10px;letter-spacing:.2em;color:#252530">雪 · MEMORY SYSTEM</span>
+            <span id="status-clock" class="text-xs text-gray-700 tabular-nums"></span>
+          </div>
+
+          <!-- §1 Identity row -->
+          <div class="id-section flex gap-4 items-center">
+            <div id="avatar-ring" class="shrink-0 w-16 h-16 rounded-full border-2 overflow-hidden flex items-center justify-center" style="border-color:#1e1e1e;background:#111">
+              <img id="avatar-img" class="hidden w-full h-full object-cover object-top">
+              <span id="avatar-ph" class="text-2xl font-light" style="color:#2a2a2a">雪</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-base font-medium text-gray-100 tracking-wide">雪</div>
+              <div class="text-xs text-gray-600 mt-0.5">设计系 · 研究生二年级</div>
+              <div class="flex items-center gap-1.5 mt-2">
+                <div id="conn-dot" class="w-1.5 h-1.5 rounded-full shrink-0 bg-gray-800"></div>
+                <span id="conn-label" class="text-xs text-gray-600">—</span>
+                <span id="conn-ago" class="text-xs text-gray-800 ml-1">—</span>
+              </div>
+            </div>
+            <div class="shrink-0 text-right">
+              <div class="lbl text-right mb-2">心情</div>
+              <div id="mood-pill" class="inline-block px-3 py-1 rounded-full border text-sm font-medium" style="background:#141414;border-color:#222;color:#4b5563">—</div>
+              <div id="mood-ts" class="text-xs mt-1.5" style="color:#2a2a2a">—</div>
+            </div>
+          </div>
+
+          <!-- §2 Activity + signature -->
+          <div class="id-section">
+            <div class="lbl">正在做</div>
+            <div id="activity-text" class="text-sm text-gray-300 leading-relaxed mt-1">—</div>
+            <div class="mt-3 pt-3 border-t border-gray-900">
+              <div class="lbl">个性签名</div>
+              <div class="text-xs leading-relaxed mt-1" style="color:#353535;font-style:italic">以为自己把什么都想明白了，夜里听见一首歌，发现没有</div>
+            </div>
+          </div>
+
+          <!-- §3 Stats row -->
+          <div class="id-section grid grid-cols-4 divide-x divide-gray-900">
+            <div class="text-center pr-2">
+              <div class="lbl text-center">今日发出</div>
+              <div id="stat-sent" class="text-xl font-light text-gray-300 leading-none">—</div>
+              <div class="text-xs text-gray-700 mt-0.5">条</div>
+            </div>
+            <div class="text-center px-2">
+              <div class="lbl text-center">今日 Tick</div>
+              <div id="stat-ticks" class="text-xl font-light text-gray-300 leading-none">—</div>
+              <div class="text-xs text-gray-700 mt-0.5">次</div>
+            </div>
+            <div class="text-center px-2">
+              <div class="lbl text-center">下次 Tick</div>
+              <div id="stat-next" class="text-base font-light text-gray-300 leading-none">—</div>
+            </div>
+            <div class="text-center pl-2">
+              <div class="lbl text-center">倒计时</div>
+              <div id="stat-next-rel" class="text-base font-light text-gray-300 leading-none">—</div>
+            </div>
+          </div>
+
+          <!-- §4 Emotion curve + arc -->
+          <div class="id-section flex-1 flex flex-col">
+            <div class="flex items-center justify-between mb-3">
+              <div class="lbl mb-0">今日情绪曲线</div>
+              <div class="flex items-center gap-3">
+                <span id="conn-sent" class="text-xs text-gray-700">—</span>
+                <span id="conn-snippet" class="text-xs truncate max-w-40" style="color:#2a2a2a" title=""></span>
+              </div>
+            </div>
+            <svg id="emotion-curve" width="100%" height="72" style="display:block;overflow:visible"></svg>
+            <div class="grid grid-cols-3 mt-3 pt-3 border-t border-gray-900">
+              <div class="pr-3">
+                <div class="text-xs text-gray-700 mb-1">上午</div>
+                <div id="arc-morning" class="text-xs text-gray-600 leading-relaxed">—</div>
+              </div>
+              <div class="px-3 border-x border-gray-900">
+                <div class="text-xs text-gray-700 mb-1">下午</div>
+                <div id="arc-afternoon" class="text-xs text-gray-600 leading-relaxed">—</div>
+              </div>
+              <div class="pl-3">
+                <div class="text-xs text-gray-700 mb-1">傍晚</div>
+                <div id="arc-evening" class="text-xs text-gray-600 leading-relaxed">—</div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /id-card -->
+      </div><!-- /right -->
+    </div><!-- /flex -->
+  </div><!-- /tab-status -->
+
+  <!-- ══ Xun Tab ══ -->
+  <div id="tab-xun" class="hidden">
+    <div class="flex gap-4" style="min-height:540px">
+
+      <!-- Left: portrait -->
+      <div id="xun-portrait-zone"
+           class="shrink-0 relative rounded-2xl border-2 border-dashed border-gray-800 cursor-pointer overflow-hidden flex flex-col items-center justify-center"
+           style="width:190px"
+           onclick="document.getElementById('xun-portrait-input').click()"
+           ondragover="event.preventDefault()"
+           ondrop="handleXunPortraitDrop(event)">
+        <img id="xun-portrait-img" class="hidden absolute inset-0 w-full h-full object-cover object-top">
+        <div class="portrait-overlay"></div>
+        <div id="xun-portrait-ph" class="flex flex-col items-center gap-3 px-6 text-center z-10 select-none">
+          <span style="font-size:48px;font-weight:100;color:#2a2a2a">薰</span>
+          <span class="text-xs leading-relaxed" style="color:#2e2e2e">点击或拖放<br>薰的照片</span>
+        </div>
+        <div id="xun-portrait-name" class="hidden absolute bottom-0 left-0 right-0 p-4 z-10">
+          <div class="text-base font-light text-white">薰</div>
+          <div class="text-xs text-gray-400 mt-0.5">人机交互 · 研究生</div>
+        </div>
+        <input type="file" id="xun-portrait-input" class="hidden" accept="image/*" onchange="handleXunPortraitFile(this)">
+      </div>
+
+      <!-- Right: profile cards -->
+      <div class="flex-1 flex flex-col gap-3 min-w-0 overflow-y-auto">
+
+        <!-- Basic info -->
+        <div class="id-card">
+          <div class="id-card-header">
+            <span style="font-size:10px;letter-spacing:.2em;color:#252530">薰 · PROFILE</span>
+            <span class="text-xs text-gray-700">雪的视角</span>
+          </div>
+          <div class="id-section">
+            <div class="lbl">档案</div>
+            <div class="grid grid-cols-2 gap-x-6 gap-y-2 mt-1 text-xs">
+              <div><span class="text-gray-600">方向</span><span class="text-gray-300 ml-2">人机交互 · Social Robotics</span></div>
+              <div><span class="text-gray-600">年级</span><span class="text-gray-300 ml-2">研究生（硕士）</span></div>
+              <div><span class="text-gray-600">研究</span><span class="text-gray-300 ml-2">Group HRT · 人机信任</span></div>
+              <div><span class="text-gray-600">称呼</span><span class="text-gray-300 ml-2">叫雪「姐姐」</span></div>
+            </div>
+          </div>
+          <div class="id-section">
+            <div class="lbl">在雪眼里</div>
+            <div class="text-xs text-gray-400 leading-relaxed mt-1">有点让人意外的那种聪明。说正经事的时候眼神很笃定，说完又开始撒娇，无缝衔接，像是同一个人但不像同一个状态。雪注意到她记事很细，还有就是她不太介意被看见。</div>
+          </div>
+        </div>
+
+        <!-- Key traits -->
+        <div class="card p-4">
+          <div class="lbl mb-2">关键特质</div>
+          <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+            <div class="flex items-start gap-2"><span class="text-purple-600 shrink-0">·</span><span class="text-gray-400">习惯晚睡，开会多，开完还去健身，体力好得让雪有点不解</span></div>
+            <div class="flex items-start gap-2"><span class="text-purple-600 shrink-0">·</span><span class="text-gray-400">不喜欢甜的（雪记得，点菜时悄悄记住了）</span></div>
+            <div class="flex items-start gap-2"><span class="text-purple-600 shrink-0">·</span><span class="text-gray-400">有乐队背景，知道万青《秦皇岛》，最后选了 Oasis</span></div>
+            <div class="flex items-start gap-2"><span class="text-purple-600 shrink-0">·</span><span class="text-gray-400">减脂中，自己煎鸡胸肉吃，认真的那种</span></div>
+            <div class="flex items-start gap-2"><span class="text-purple-600 shrink-0">·</span><span class="text-gray-400">用塔罗牌算修设备能不能成功（修不好，塔罗准了）</span></div>
+            <div class="flex items-start gap-2"><span class="text-purple-600 shrink-0">·</span><span class="text-gray-400">在追雪，但不急，不刻意，就是在那儿</span></div>
+          </div>
+        </div>
+
+        <!-- Relationship -->
+        <div class="card p-4">
+          <div class="lbl mb-2">关于我们</div>
+          <div class="space-y-2 text-xs">
+            <div class="flex gap-3"><span class="text-gray-700 shrink-0 w-16">怎么认识</span><span class="text-gray-400">摄影社迎新，薰把名字写歪了。雪没说什么，只是把登记本悄悄转了个方向。</span></div>
+            <div class="flex gap-3"><span class="text-gray-700 shrink-0 w-16">现在</span><span class="text-gray-400">薰在追，雪感觉得到，选择慢慢来——让她靠近，但不主动跨出去。在等一个说不清的时机。</span></div>
+            <div class="flex gap-3"><span class="text-gray-700 shrink-0 w-16">约定</span><span class="text-gray-400">见面时薰做番茄炒蛋配米饭</span></div>
+            <div class="flex gap-3"><span class="text-gray-700 shrink-0 w-16">薰说过</span><span class="text-gray-400 italic">「喜欢姐姐」「我会等到姐姐愿意说的时候」「我好喜欢……讨论学术这个好严肃的姐姐也好性感」</span></div>
+          </div>
+        </div>
+
+        <!-- Research -->
+        <div class="card p-4">
+          <div class="lbl mb-2">研究课题（雪听来的）</div>
+          <div class="text-xs text-gray-400 leading-relaxed space-y-2">
+            <p>主方向是 Group HRT（人机信任），研究 mediation 过程中信任的建立、崩塌与修复。用 social presence 和 ontological framing switches 串起工具性信任和社会参与者性信任，研究两者之间的 trade-off。</p>
+            <p>方法：主观量表 + behavior analysis + 生理数据对齐，拍视频事后标注关键节点。声音刺激（高于基线 ≥20dB）作为崩塌触发标记点。</p>
+            <p class="text-gray-700 italic">「我才硕士，你说到了我博士课题去了」</p>
+          </div>
+        </div>
+
+      </div><!-- /right -->
+    </div><!-- /flex -->
+  </div><!-- /tab-xun -->
+
+  <!-- ══ Memories Tab ══ -->
+  <div id="tab-memories" class="hidden">
+    <div class="flex gap-3 mb-4">
+      <select id="filter-cat" onchange="loadMemories()" class="text-xs px-2 py-1 rounded">
+        <option value="">全部分类</option>
+        <option value="relationship_status">关系状态</option>
+        <option value="her_preferences">薰的偏好</option>
+        <option value="her_life">薰的生活</option>
+        <option value="promises">约定</option>
+        <option value="emotional_events">情感事件</option>
+        <option value="shared_knowledge">共同话题</option>
+        <option value="personal_facts">个人事实</option>
+        <option value="general">通用</option>
+      </select>
+      <select id="filter-type" onchange="loadMemories()" class="text-xs px-2 py-1 rounded">
+        <option value="">全部类型</option>
+        <option value="fragment">碎片</option>
+        <option value="daily_digest">日摘要</option>
+        <option value="scene">场景</option>
+        <option value="digested">已整合</option>
+      </select>
+      <label class="flex items-center gap-1 text-xs text-gray-400">
+        <input type="checkbox" id="filter-perm" onchange="loadMemories()"> 仅永久
+      </label>
+      <button onclick="showCreateForm()" class="ml-auto px-3 py-1 text-xs bg-purple-900 hover:bg-purple-800 text-purple-200 rounded">
+        + 新建记忆
+      </button>
+    </div>
+    <div id="create-form" class="hidden card p-4 mb-4 text-sm">
+      <h3 class="text-gray-300 font-medium mb-3">新建记忆</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <input id="new-title"   placeholder="标题（5-15字）" class="px-2 py-1.5 rounded text-sm col-span-2">
+        <textarea id="new-content" placeholder="内容（20-100字）" rows="3" class="px-2 py-1.5 rounded text-sm col-span-2"></textarea>
+        <div class="flex gap-2 items-center">
+          <label class="text-gray-500 text-xs w-16">重要度</label>
+          <input id="new-importance" type="number" min="1" max="10" value="5" class="w-16 px-2 py-1 rounded text-xs">
+        </div>
+        <div class="flex gap-2 items-center">
+          <label class="text-gray-500 text-xs w-16">情感度</label>
+          <input id="new-emotion" type="number" min="0" max="10" step="0.5" value="5" class="w-16 px-2 py-1 rounded text-xs">
+        </div>
+        <select id="new-cat" class="px-2 py-1 rounded text-xs">
+          <option value="relationship_status">关系状态</option>
+          <option value="her_preferences">薰的偏好</option>
+          <option value="her_life">薰的生活</option>
+          <option value="promises">约定</option>
+          <option value="emotional_events">情感事件</option>
+          <option value="shared_knowledge">共同话题</option>
+          <option value="personal_facts">个人事实</option>
+          <option value="general">通用</option>
+        </select>
+        <label class="flex items-center gap-1 text-xs text-gray-400">
+          <input type="checkbox" id="new-perm"> 永久锁定
+        </label>
+      </div>
+      <div class="flex gap-2 mt-3">
+        <button onclick="submitCreate()" class="px-3 py-1.5 text-xs bg-purple-800 hover:bg-purple-700 text-purple-100 rounded">保存</button>
+        <button onclick="hideCreateForm()" class="px-3 py-1.5 text-xs bg-gray-800 text-gray-400 rounded">取消</button>
+      </div>
+    </div>
+    <div id="memories-list" class="space-y-2"></div>
+    <div class="flex justify-center gap-3 mt-4">
+      <button onclick="prevPage()" class="px-3 py-1 text-xs bg-gray-800 rounded">←</button>
+      <span id="page-info" class="text-xs text-gray-500 py-1"></span>
+      <button onclick="nextPage()" class="px-3 py-1 text-xs bg-gray-800 rounded">→</button>
+    </div>
+  </div>
+
+  <!-- ══ Search Tab ══ -->
+  <div id="tab-search" class="hidden">
+    <div class="flex gap-2 mb-4">
+      <input id="search-q" placeholder="搜索记忆…" class="flex-1 px-3 py-2 rounded text-sm"
+             onkeydown="if(event.key==='Enter')doSearch()">
+      <button onclick="doSearch()" class="px-4 py-2 text-sm bg-purple-900 hover:bg-purple-800 text-purple-200 rounded">搜索</button>
+    </div>
+    <div id="search-results" class="space-y-2"></div>
+  </div>
+
+  <!-- ══ Scenes Tab ══ -->
+  <div id="tab-scenes" class="hidden">
+    <div id="scenes-list" class="space-y-3"></div>
+  </div>
+
+  <!-- ══ Calendar Tab ══ -->
+  <div id="tab-calendar" class="hidden">
+    <div class="flex gap-3 mb-4">
+      <input id="cal-date" type="date" class="px-2 py-1.5 rounded text-sm">
+      <button onclick="genDay()"  class="px-3 py-1.5 text-xs bg-indigo-900 hover:bg-indigo-800 text-indigo-200 rounded">生成日摘要</button>
+      <input id="cal-week" type="date" class="px-2 py-1.5 rounded text-sm">
+      <button onclick="genWeek()" class="px-3 py-1.5 text-xs bg-indigo-900 hover:bg-indigo-800 text-indigo-200 rounded">生成周摘要</button>
+    </div>
+    <div id="calendar-pages" class="space-y-2"></div>
+  </div>
+
+  <!-- ══ Logs Tab ══ -->
+  <div id="tab-logs" class="hidden">
+    <div class="flex gap-2 mb-3">
+      <input id="log-date" type="date" class="px-2 py-1.5 rounded text-sm" onchange="loadLogs()">
+      <button onclick="loadLogs()" class="px-3 py-1.5 text-xs bg-gray-800 rounded">加载</button>
+    </div>
+    <div id="logs-list" class="space-y-1"></div>
+  </div>
+
+  <!-- ══ Diary Tab ══ -->
+  <div id="tab-diary" class="hidden">
+    <div id="diary-list" class="space-y-4"></div>
+  </div>
+
+  <!-- ══ Config Tab ══ -->
+  <div id="tab-config" class="hidden">
+    <div id="config-list" class="space-y-2"></div>
+  </div>
+
+</div><!-- /max-w -->
+
+<script>
+const API = 'http://127.0.0.1:8765';
+let currentPage = 1;
+let totalMemories = 0;
+const PER_PAGE = 20;
+let statusTimer = null;
+
+// ── Tab switching ──────────────────────────────────────────────────────────────
+const tabs = ['status','xun','memories','search','scenes','calendar','logs','diary','config'];
+function switchTab(name) {
+  tabs.forEach((t, i) => {
+    document.getElementById('tab-'+t).classList.add('hidden');
+    const btn = document.querySelectorAll('.flex.gap-5.border-b button')[i];
+    btn.classList.remove('tab-active');
+    btn.classList.add('text-gray-600');
+  });
+  document.getElementById('tab-'+name).classList.remove('hidden');
+  const idx = tabs.indexOf(name);
+  const activeBtn = document.querySelectorAll('.flex.gap-5.border-b button')[idx];
+  activeBtn.classList.add('tab-active');
+  activeBtn.classList.remove('text-gray-600');
+
+  clearInterval(statusTimer);
+  if (name === 'status')   { loadStatus(); statusTimer = setInterval(loadStatus, 30000); }
+  if (name === 'memories') loadMemories();
+  if (name === 'scenes')   loadScenes();
+  if (name === 'calendar') loadCalendar();
+  if (name === 'config')   loadConfig();
+  if (name === 'logs')     loadLogs();
+  if (name === 'diary')    loadDiaries();
+}
+
+// ── Status page ────────────────────────────────────────────────────────────────
+const MOOD_PALETTE = {
+  'sleeping': { bg:'#0e0e12', border:'#1a1a22', text:'#4b5563' },
+  '松':       { bg:'#061a12', border:'#0d3321', text:'#6ee7b7' },
+  '轻松':     { bg:'#061a12', border:'#0d3321', text:'#6ee7b7' },
+  '轻':       { bg:'#07101e', border:'#0f2040', text:'#93c5fd' },
+  '平':       { bg:'#111318', border:'#1e2330', text:'#94a3b8' },
+  '慢热':     { bg:'#08111f', border:'#122035', text:'#7dd3fc' },
+  '专注':     { bg:'#16100a', border:'#2a1f08', text:'#fcd34d' },
+  '沉':       { bg:'#0b0b1e', border:'#15153a', text:'#a5b4fc' },
+  '轻烦':     { bg:'#150808', border:'#2e1010', text:'#fca5a5' },
+  '烦':       { bg:'#1a0606', border:'#3a0d0d', text:'#f87171' },
+};
+
+function moodPalette(mood) {
+  return MOOD_PALETTE[mood] || { bg:'#141414', border:'#222', text:'#9ca3af' };
+}
+
+function relTime(iso) {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1)   return '刚刚';
+  if (m < 60)  return `${m} 分钟前`;
+  const h = Math.floor(m / 60);
+  if (h < 24)  return `${h} 小时前`;
+  return `${Math.floor(h/24)} 天前`;
+}
+
+function connState(isoStr) {
+  if (!isoStr) return { dot:'bg-gray-800', label:'—', cls:'text-gray-600' };
+  const m = Math.floor((Date.now() - new Date(isoStr).getTime()) / 60000);
+  if (m < 30)  return { dot:'bg-green-400 pulse', label:'在线',    cls:'text-green-400' };
+  if (m < 120) return { dot:'bg-green-700',        label:'最近在线', cls:'text-green-700' };
+  if (m < 360) return { dot:'bg-amber-700',         label:'不在线',  cls:'text-amber-700' };
+  return              { dot:'bg-gray-700',           label:'离线',    cls:'text-gray-600' };
+}
+
+async function loadStatus() {
+  const d = await fetch(API+'/status').then(r=>r.json()).catch(()=>null);
+  if (!d) return;
+
+  // mood pill + avatar ring border
+  const mood = d.latest_log?.mood || '—';
+  const pal  = moodPalette(mood);
+  const pill = document.getElementById('mood-pill');
+  if (pill) { pill.textContent=mood; pill.style.background=pal.bg; pill.style.borderColor=pal.border; pill.style.color=pal.text; }
+  const ring = document.getElementById('avatar-ring');
+  if (ring) ring.style.borderColor = pal.border;
+  document.getElementById('mood-ts').textContent = d.latest_log?.ts ? relTime(d.latest_log.ts) : '—';
+
+  // activity
+  document.getElementById('activity-text').textContent = d.latest_log?.activity || '—';
+
+  // connection
+  const cs = connState(d.latest_user_msg?.ts);
+  const dot = document.getElementById('conn-dot');
+  dot.className = `w-1.5 h-1.5 rounded-full shrink-0 ${cs.dot}`;
+  const connLbl = document.getElementById('conn-label');
+  connLbl.textContent = cs.label;
+  connLbl.className   = `text-xs ${cs.cls}`;
+  document.getElementById('conn-ago').textContent = relTime(d.latest_user_msg?.ts);
+  const snippet = d.latest_user_msg?.content || '';
+  const snippetEl = document.getElementById('conn-snippet');
+  snippetEl.textContent = snippet.slice(0,28) + (snippet.length>28?'…':'');
+  snippetEl.title = snippet;
+  document.getElementById('conn-sent').textContent = `今日发出 ${d.today_sent ?? '—'} 条`;
+
+  // stats
+  document.getElementById('stat-sent').textContent  = d.today_sent  ?? '—';
+  document.getElementById('stat-ticks').textContent = d.today_ticks ?? '—';
+  if (d.next_tick) {
+    const nt  = new Date(d.next_tick);
+    const rel = Math.round((nt - Date.now()) / 60000);
+    document.getElementById('stat-next').textContent     = nt.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('stat-next-rel').textContent = rel > 0 ? `${rel}m` : '即将';
+  }
+
+  // emotional arc text
+  if (d.emotional_arc) {
+    document.getElementById('arc-morning').textContent   = d.emotional_arc.morning   || '—';
+    document.getElementById('arc-afternoon').textContent = d.emotional_arc.afternoon || '—';
+    document.getElementById('arc-evening').textContent   = d.emotional_arc.evening   || '—';
+  }
+
+  // emotion curve SVG
+  drawEmotionCurve(d.today_logs);
+}
+
+// portrait
+function setPortrait(url, upload=true) {
+  document.getElementById('portrait-img').src = url;
+  document.getElementById('portrait-img').classList.remove('hidden');
+  document.getElementById('portrait-ph').classList.add('hidden');
+  document.getElementById('portrait-name').classList.remove('hidden');
+  if (upload && url.startsWith('data:')) {
+    localStorage.setItem('yukibot-portrait', url);
+    fetch(`${API}/profile/portrait`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({data_url: url})
+    }).catch(() => {});
+  }
+}
+function setAvatar(url) {
+  const ai = document.getElementById('avatar-img');
+  const ap = document.getElementById('avatar-ph');
+  if (ai) { ai.src = url; ai.classList.remove('hidden'); }
+  if (ap) ap.classList.add('hidden');
+}
+function handlePortraitFile(input) {
+  if (!input.files[0]) return;
+  const r = new FileReader();
+  r.onload = e => setPortrait(e.target.result, true);
+  r.readAsDataURL(input.files[0]);
+}
+function handlePortraitDrop(e) {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (!f || !f.type.startsWith('image/')) return;
+  const r = new FileReader();
+  r.onload = ev => setPortrait(ev.target.result, true);
+  r.readAsDataURL(f);
+}
+(async function() {
+  try {
+    const resp = await fetch(`${API}/profile/portrait`);
+    if (resp.ok) { setPortrait(URL.createObjectURL(await resp.blob()), false); return; }
+  } catch {}
+  const s = localStorage.getItem('yukibot-portrait');
+  if (s) setPortrait(s, false);
+})();
+(async function() {
+  try {
+    const resp = await fetch(`${API}/profile/avatar`);
+    if (resp.ok) { setAvatar(URL.createObjectURL(await resp.blob())); return; }
+  } catch {}
+})();
+
+// ── Heat stats ─────────────────────────────────────────────────────────────────
+async function loadHeatStats() {
+  const r = await fetch(API+'/memories/heat-stats').then(r=>r.json()).catch(()=>null);
+  if (!r) return;
+  document.getElementById('heat-summary').textContent =
+    `记忆 ${r.total} 条 · 热 ${r.hot} · 温 ${r.warm} · 冷 ${r.cold} · 永久 ${r.permanent}`;
+}
+
+// ── Memories ───────────────────────────────────────────────────────────────────
+function heatBadge(h) {
+  if (h >= 0.7) return `<span class="badge-hot  text-xs px-1.5 py-0.5 rounded">热 ${h.toFixed(2)}</span>`;
+  if (h >= 0.3) return `<span class="badge-warm text-xs px-1.5 py-0.5 rounded">温 ${h.toFixed(2)}</span>`;
+  return              `<span class="badge-cold text-xs px-1.5 py-0.5 rounded">冷 ${h.toFixed(2)}</span>`;
+}
+
+async function loadMemories() {
+  const cat  = document.getElementById('filter-cat').value;
+  const type = document.getElementById('filter-type').value;
+  const perm = document.getElementById('filter-perm').checked;
+  let url = `${API}/memories?page=${currentPage}&per_page=${PER_PAGE}`;
+  if (cat)  url += `&category=${cat}`;
+  if (type) url += `&memory_type=${type}`;
+  if (perm) url += `&permanent_only=true`;
+  const data = await fetch(url).then(r=>r.json()).catch(()=>({memories:[],total:0}));
+  totalMemories = data.total;
+  document.getElementById('page-info').textContent =
+    `${currentPage} / ${Math.ceil(data.total/PER_PAGE)} 页（共 ${data.total} 条）`;
+  document.getElementById('memories-list').innerHTML = data.memories.map(m => `
+    <div class="card p-3" id="mem-${m.id}">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap mb-1">
+            ${heatBadge(m.heat_score)}
+            ${m.permanent ? '<span class="badge-perm text-xs px-1.5 py-0.5 rounded">永久</span>' : ''}
+            <span class="text-xs text-gray-600">[${m.category}]</span>
+            <span class="text-xs text-gray-700">#${m.id}</span>
+          </div>
+          <div class="text-sm text-gray-200 font-medium">${m.title}</div>
+          <div class="text-xs text-gray-500 mt-0.5 leading-relaxed">${m.content}</div>
+          <div class="text-xs text-gray-700 mt-1">重要度 ${m.importance} · 情感 ${m.emotional_weight} · 访问 ${m.access_count}次 · ${m.created_at?.slice(0,10)||''}</div>
+        </div>
+        <div class="flex gap-1 shrink-0">
+          <button onclick="togglePerm(${m.id})" class="px-2 py-1 text-xs bg-gray-800 hover:bg-gray-700 rounded" title="切换永久">${m.permanent?'🔒':'🔓'}</button>
+          <button onclick="deleteMem(${m.id})"  class="px-2 py-1 text-xs bg-red-950 hover:bg-red-900 text-red-400 rounded">删</button>
+        </div>
+      </div>
+    </div>`).join('');
+  loadHeatStats();
+}
+
+function prevPage() { if(currentPage>1){currentPage--;loadMemories();} }
+function nextPage() { if(currentPage*PER_PAGE<totalMemories){currentPage++;loadMemories();} }
+
+async function togglePerm(id) {
+  await fetch(`${API}/memories/${id}/toggle-permanent`,{method:'POST'});
+  loadMemories();
+}
+async function deleteMem(id) {
+  if (!confirm('删除这条记忆？')) return;
+  await fetch(`${API}/memories/${id}`,{method:'DELETE'});
+  document.getElementById('mem-'+id)?.remove();
+  loadHeatStats();
+}
+function showCreateForm()  { document.getElementById('create-form').classList.remove('hidden'); }
+function hideCreateForm()  { document.getElementById('create-form').classList.add('hidden'); }
+async function submitCreate() {
+  const body = {
+    title: document.getElementById('new-title').value,
+    content: document.getElementById('new-content').value,
+    importance: parseInt(document.getElementById('new-importance').value),
+    emotional_weight: parseFloat(document.getElementById('new-emotion').value),
+    category: document.getElementById('new-cat').value,
+    permanent: document.getElementById('new-perm').checked,
+    source: 'user_explicit',
+  };
+  if (!body.title||!body.content) { alert('请填写标题和内容'); return; }
+  await fetch(`${API}/memories`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  hideCreateForm(); loadMemories();
+}
+
+// ── Search ─────────────────────────────────────────────────────────────────────
+async function doSearch() {
+  const q = document.getElementById('search-q').value.trim();
+  if (!q) return;
+  const data = await fetch(`${API}/memories/search?q=${encodeURIComponent(q)}`).then(r=>r.json());
+  const el = document.getElementById('search-results');
+  if (!data.results.length) { el.innerHTML='<p class="text-xs text-gray-600">无结果</p>'; return; }
+  el.innerHTML = data.results.map(m=>`
+    <div class="card p-3">
+      <div class="flex items-center gap-2 mb-1">
+        ${heatBadge(m.heat_score)}
+        <span class="text-xs text-gray-600">[${m.category}] ${m.tier}</span>
+        <span class="text-xs text-gray-700">RRF ${m.rrf_score?.toFixed(4)||''}</span>
+      </div>
+      <div class="text-sm font-medium text-gray-200">${m.title}</div>
+      <div class="text-xs text-gray-500 mt-0.5">${m.content}</div>
+    </div>`).join('');
+}
+
+// ── Dream Scenes ───────────────────────────────────────────────────────────────
+async function loadScenes() {
+  const data = await fetch(`${API}/dream/scenes`).then(r=>r.json());
+  const el = document.getElementById('scenes-list');
+  if (!data.scenes.length) { el.innerHTML='<p class="text-xs text-gray-600">暂无场景</p>'; return; }
+  el.innerHTML = data.scenes.map(s=>{
+    const facts = JSON.parse(s.atomic_facts||'[]');
+    return `<div class="card p-4">
+      <div class="flex justify-between items-start mb-2">
+        <h3 class="text-sm font-medium text-purple-300">${s.title}</h3>
+        <span class="text-xs text-gray-700">${s.created_at?.slice(0,10)||''}</span>
+      </div>
+      <p class="text-xs text-gray-400 leading-relaxed mb-2">${s.narrative}</p>
+      ${facts.length?`<ul class="text-xs text-gray-600 space-y-0.5 ml-3 list-disc">${facts.map(f=>`<li>${f}</li>`).join('')}</ul>`:''}
+      ${s.foresight?`<p class="text-xs text-indigo-400 mt-2">洞察：${s.foresight}</p>`:''}
+    </div>`;
+  }).join('');
+}
+
+// ── Calendar ───────────────────────────────────────────────────────────────────
+async function loadCalendar() {
+  const data = await fetch(`${API}/calendar/pages?limit=30`).then(r=>r.json());
+  const el = document.getElementById('calendar-pages');
+  const label = {day:'日',week:'周',month:'月'};
+  el.innerHTML = data.pages.map(p=>`
+    <div class="card p-3">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-xs bg-gray-900 px-1.5 py-0.5 rounded text-gray-500">${label[p.page_type]||p.page_type}</span>
+        <span class="text-xs text-gray-600">${p.date}</span>
+      </div>
+      <p class="text-xs text-gray-400 leading-relaxed">${p.content}</p>
+    </div>`).join('') || '<p class="text-xs text-gray-600">暂无日历数据</p>';
+}
+async function genDay() {
+  const d = document.getElementById('cal-date').value;
+  if (!d) { alert('请选择日期'); return; }
+  const r = await fetch(`${API}/calendar/day?date=${d}`,{method:'POST'}).then(r=>r.json());
+  alert(`日摘要：\n${r.content?.slice(0,120)}…`); loadCalendar();
+}
+async function genWeek() {
+  const d = document.getElementById('cal-week').value;
+  if (!d) { alert('请选择周起始日'); return; }
+  const r = await fetch(`${API}/calendar/week?week_start=${d}`,{method:'POST'}).then(r=>r.json());
+  alert(`周摘要：\n${r.content?.slice(0,80)}…`); loadCalendar();
+}
+
+// ── Life Logs ──────────────────────────────────────────────────────────────────
+async function loadLogs() {
+  const d = document.getElementById('log-date').value;
+  let url = `${API}/lifelogs?limit=60`;
+  if (d) url += `&date=${d}`;
+  const data = await fetch(url).then(r=>r.json());
+  const moodCls = m => m==='sleeping'?'text-gray-700':
+    (m==='松'||m==='轻'||m==='轻松')?'text-green-600':
+    (m==='专注')?'text-amber-600':
+    (m==='烦'||m==='轻烦')?'text-red-700':'text-gray-500';
+  document.getElementById('logs-list').innerHTML = data.logs.map(l=>`
+    <div class="flex gap-3 items-start py-1.5 border-b border-gray-900">
+      <span class="text-xs text-gray-700 w-12 shrink-0 tabular-nums">${l.ts?.slice(11,16)||''}</span>
+      <span class="text-xs ${moodCls(l.mood)} w-10 shrink-0">${l.mood}</span>
+      <span class="text-xs text-gray-500">${l.activity}</span>
+      ${l.should_message?`<span class="text-xs text-purple-500 ml-auto shrink-0">📨 ${l.message_type}</span>`:''}
+    </div>`).join('') || '<p class="text-xs text-gray-600">无记录</p>';
+}
+
+// ── Config ─────────────────────────────────────────────────────────────────────
+async function loadConfig() {
+  const data = await fetch(`${API}/admin/config`).then(r=>r.json());
+  document.getElementById('config-list').innerHTML = Object.entries(data).map(([k,v])=>`
+    <div class="card p-3 flex items-center gap-3">
+      <label class="text-xs text-gray-500 w-56 shrink-0">${k}</label>
+      <input id="cfg-${k}" value="${v}" class="flex-1 px-2 py-1 rounded text-xs"
+             onkeydown="if(event.key==='Enter')saveConfig('${k}')">
+      <button onclick="saveConfig('${k}')" class="px-2 py-1 text-xs bg-gray-800 hover:bg-gray-700 rounded">保存</button>
+    </div>`).join('');
+}
+async function saveConfig(key) {
+  const val = document.getElementById('cfg-'+key).value;
+  await fetch(`${API}/admin/config/${key}`,{
+    method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:val})
+  });
+}
+
+// ── Dream / Decay ──────────────────────────────────────────────────────────────
+async function triggerDream() {
+  if (!confirm('运行 Dream 整合？')) return;
+  const r = await fetch(`${API}/dream/start?force=true`,{method:'POST'}).then(r=>r.json());
+  if (r.error)   { alert('Dream 失败：'+r.error); return; }
+  if (r.skipped) { alert('碎片不足，已跳过'); return; }
+  alert(`Dream 完成：删除 ${r.changes?.deleted?.length||0}，场景 ${r.changes?.scenes_created?.length||0}`);
+  if (document.getElementById('tab-scenes').classList.contains('hidden') === false) loadScenes();
+}
+async function triggerDecay() {
+  await fetch(`${API}/memories/decay-all`,{method:'POST'});
+  if (document.getElementById('tab-memories').classList.contains('hidden') === false) loadMemories();
+  loadHeatStats();
+}
+
+// ── Emotion Curve ──────────────────────────────────────────────────────────────
+const MOOD_INT = {
+  'sleeping':0,'烦':2,'轻烦':3.5,'沉':4,'unknown':4.5,'平':5,
+  '慢热':5.5,'专注':7,'轻':7.5,'松':8,'轻松':8
+};
+function moodInt(m) { return MOOD_INT[m] ?? 5; }
+
+function drawEmotionCurve(logs) {
+  const svg = document.getElementById('emotion-curve');
+  if (!svg) return;
+  const W = svg.getBoundingClientRect().width || svg.parentElement?.clientWidth || 400;
+  const H = 72, pad = 8;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  if (!logs || logs.length === 0) {
+    svg.innerHTML = `<text x="${(W/2).toFixed(0)}" y="${(H/2).toFixed(0)}" text-anchor="middle" fill="#222" font-size="10" font-family="sans-serif">暂无数据</text>`;
+    return;
+  }
+
+  const pts = logs.map(l => {
+    const t = new Date(l.ts);
+    const h = t.getHours() + t.getMinutes()/60;
+    const v = moodInt(l.mood);
+    return { x: pad + (h/24)*(W-pad*2), y: (H-pad) - (v/10)*(H-pad*2) };
+  });
+
+  let grid = '';
+  for (let i = 0; i <= 10; i += 2) {
+    const y = ((H-pad) - (i/10)*(H-pad*2)).toFixed(1);
+    grid += `<line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="#191919" stroke-width="0.5"/>`;
+  }
+
+  const lastMood = logs[logs.length-1]?.mood;
+  const sc = moodPalette(lastMood).text || '#7c3aed';
+
+  let pathD = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 1; i < pts.length; i++) {
+    const mx = ((pts[i-1].x + pts[i].x)/2).toFixed(1);
+    pathD += ` C ${mx} ${pts[i-1].y.toFixed(1)} ${mx} ${pts[i].y.toFixed(1)} ${pts[i].x.toFixed(1)} ${pts[i].y.toFixed(1)}`;
+  }
+  const fillD = pathD + ` L ${pts[pts.length-1].x.toFixed(1)} ${H-pad} L ${pts[0].x.toFixed(1)} ${H-pad} Z`;
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${sc}" stop-opacity="0.22"/>
+        <stop offset="100%" stop-color="${sc}" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    ${grid}
+    <path d="${fillD}" fill="url(#cg)"/>
+    <path d="${pathD}" fill="none" stroke="${sc}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    ${pts.map((p,i) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${i===pts.length-1?3:1.8}" fill="${i===pts.length-1?sc:'#1c1c1c'}" stroke="${sc}" stroke-width="1"/>`).join('')}
+  `;
+}
+
+// ── Xun portrait ──────────────────────────────────────────────────────────────
+function setXunPortrait(url, upload=true) {
+  document.getElementById('xun-portrait-img').src = url;
+  document.getElementById('xun-portrait-img').classList.remove('hidden');
+  document.getElementById('xun-portrait-ph').classList.add('hidden');
+  document.getElementById('xun-portrait-name').classList.remove('hidden');
+  if (upload && url.startsWith('data:')) {
+    localStorage.setItem('yukibot-xun-portrait', url);
+    fetch(`${API}/profile/xun`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({data_url: url})
+    }).catch(() => {});
+  }
+}
+function handleXunPortraitFile(input) {
+  if (!input.files[0]) return;
+  const r = new FileReader(); r.onload = e => setXunPortrait(e.target.result, true); r.readAsDataURL(input.files[0]);
+}
+function handleXunPortraitDrop(e) {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (!f || !f.type.startsWith('image/')) return;
+  const r = new FileReader(); r.onload = ev => setXunPortrait(ev.target.result, true); r.readAsDataURL(f);
+}
+(async function() {
+  try {
+    const resp = await fetch(`${API}/profile/xun`);
+    if (resp.ok) { setXunPortrait(URL.createObjectURL(await resp.blob()), false); return; }
+  } catch {}
+  const s = localStorage.getItem('yukibot-xun-portrait');
+  if (s) setXunPortrait(s, false);
+})();
+
+// ── Diary ──────────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+const WD = ['日','一','二','三','四','五','六'];
+async function loadDiaries() {
+  const el = document.getElementById('diary-list');
+  el.innerHTML = '<p class="text-xs text-gray-600">加载中…</p>';
+  const data = await fetch(API+'/diaries').then(r=>r.json()).catch(()=>({diaries:[]}));
+  if (!data.diaries.length) { el.innerHTML='<p class="text-xs text-gray-600">暂无日记</p>'; return; }
+  el.innerHTML = data.diaries.map(d => {
+    const dt = new Date(d.date + 'T12:00:00');
+    const wd = WD[dt.getDay()];
+    const [y,m,day] = d.date.split('-');
+    const dateDisplay = `${y}年${m}月${day}日`;
+    const lines = d.content.split('\n');
+    const body = lines.filter(l => !/^\d{4}年\d{2}月\d{2}日$/.test(l.trim())).join('\n').trim();
+    return `<div class="card overflow-hidden">
+      <div class="id-card-header">
+        <span class="text-xs tracking-wider" style="color:#7c6aaa">${dateDisplay}</span>
+        <span class="text-xs text-gray-700">周${wd}</span>
+      </div>
+      <div class="px-5 py-4">
+        <div class="text-xs text-gray-400 leading-loose whitespace-pre-wrap">${escHtml(body)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+switchTab('status');
+loadHeatStats();
+// clock refresh
+setInterval(() => {
+  const el = document.getElementById('status-clock');
+  if (el) el.textContent = new Date().toLocaleString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}, 1000);
+</script>
+</body>
+</html>

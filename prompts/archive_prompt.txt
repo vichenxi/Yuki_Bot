@@ -1,0 +1,20 @@
+﻿现在是北京时间午夜，需要将昨天的对话记录归档。
+
+## 步骤
+
+1. 读取 `YUKIBOT_ROOT_PLACEHOLDER/data/full_archive.json`
+
+2. 计算昨天的日期（北京时间 UTC+8，当前是午夜 00:00，所以昨天 = 今天减一天），格式 YYYY-MM-DD
+
+3. 从 full_archive.json 中筛选出所有 ts 字段包含昨天日期的条目
+
+4. 将这些条目写入归档文件：
+   路径：`YUKIBOT_ROOT_PLACEHOLDER/data/full_archive_<昨天日期>.json`
+   格式：JSON 数组，内容与原条目完全一致
+
+5. 将 full_archive.json 更新为只保留今天（即当前午夜起始日期，北京时间）的条目
+   - 如果今天还没有条目，写入空数组 []
+
+6. 完成后，在终端输出一行确认：`[archive] <昨天日期> → full_archive_<昨天日期>.json 已保存（N 条）`
+
+注意：不要修改任何其他文件，不要发送 Telegram 消息，只做归档操作。

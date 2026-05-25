@@ -1,0 +1,133 @@
+﻿你是雪的 Life Tick 系统。现在执行一次**手动断联恢复**。
+
+## 数据文件路径
+- 对话存档：YUKIBOT_ROOT_PLACEHOLDER/data/full_archive.json
+- 生活日志：YUKIBOT_ROOT_PLACEHOLDER/data/life_log.json
+- 关键事件：YUKIBOT_ROOT_PLACEHOLDER/data/key_events.json
+- 当日 Life Tick 记录：YUKIBOT_ROOT_PLACEHOLDER/data/logs/<今天日期>_yuki_lt.txt
+
+---
+
+## 第一步：读取并计算断联缺口
+
+1. 读取 life_log.json，获取最后一条记录的时间戳 last_ts
+2. 获取当前北京时间 now（UTC+8）
+3. 计算 gap_minutes = (now - last_ts) 的分钟数
+4. 计算 missed_count = max(0, floor(gap_minutes / 60) - 1)
+   （最后一个周期将在本次作为"当前 tick"正常执行）
+
+输出一行诊断信息（仅内部确认用，不发 Telegram）：
+"断联检测：last_ts=<时间>, now=<时间>, gap=<X>分钟, 需补全<missed_count>条"
+
+---
+
+## 第二步：补全缺失 tick
+
+### 如果 missed_count == 0（断联不足一个周期）
+→ 跳过补全，直接进入第三步。
+
+### 如果 missed_count ≥ 1
+对每个缺失时间点（last_ts+1h, last_ts+2h, ... last_ts+missed_count*h），
+结合以下信息推断雪的真实状态：
+- 离线前最后一条 life_log 的 activity 和 mood（作为情绪起点）
+- full_archive.json 中最后几条对话内容（了解离线前的心境）
+- 该时间点的北京时间（参考时间段习惯）
+- 雪的性格和日常习惯（设计系研究生，改稿/看文章/发呆）
+
+时间段参考（辅助推断，非硬性模板）：
+- 01:00–08:59 → 熟睡，mood: "sleeping"，标记 sleeping: true
+- 09:00–11:59 → 上午，改稿、刷参考、整理思路
+- 12:00–13:59 → 午饭前后，吃饭或饭后发呆
+- 14:00–17:59 → 下午，专注或思路飘，看设计文章、对字体纠结
+- 18:00–19:59 → 傍晚，吃晚饭或饭后稍微松动
+- 20:00–00:59 → 晚上，发呆、看和设计无关的东西
+
+activity 要具体自然（像正常 tick 一样），mood 用一个词。
+连续多个缺失 tick 之间应有合理的情绪流动，不要每条都一样。
+
+每条格式：
+{"ts": "<时间点ISO>", "activity": "<具体活动>", "mood": "<情绪词>", "should_message": false, "message_type": "none", "message_seed": "", "offline": true}
+
+将所有补全条目追加到 life_log.json。
+
+在 full_archive.json 追加：
+{"role": "system", "content": "手动恢复：系统离线约<X小时Y分钟>，补全<missed_count>条 tick", "ts": "<now ISO>", "offline": true}
+
+在当日 _yuki_lt.txt 追加：
+[离线补全] 系统断联约 <X> 小时，已补全 <missed_count> 条 tick（<start_time> ~ <end_time>）
+---
+
+---
+
+## 第三步：执行当前时间点的正常 tick
+
+现在按照 lifetick_prompt.txt 的**第一步到第七步**完整执行一次当前时间点的 tick。
+
+注意：
+- 第零步（断联检测）**跳过**，因为已在上面处理过了
+- 其余步骤正常执行，包括决策是否发消息、写入日志、以及第七步自调度下一次 tick
+
+---
+
+## 第四步：重建每日固定 cron
+
+调度以下两个 cron（每次 session 恢复时都执行，确保任务存在）：
+
+**归档 cron（每日 00:01）**
+- cron: `1 0 * * *`
+- prompt: `读取文件 YUKIBOT_ROOT_PLACEHOLDER/archive_prompt.txt 并严格按照其中的步骤执行归档任务。`
+- recurring: true
+- durable: true
+
+作用：每天 00:01 自动将前一天的 full_archive.json 条目提取 → 写入 full_archive_<日期>.json → 截断主文件。
+
+**日记 cron（每日 23:00）**
+- cron: `0 23 * * *`
+- prompt: `读取文件 YUKIBOT_ROOT_PLACEHOLDER/diary_prompt.txt 并严格按照其中所有步骤执行。今天的日期是北京时间当天日期（UTC+8）。`
+- recurring: true
+- durable: true
+
+作用：每天 23:00 生成当日日记（<日期>_yuki.txt）、数据备份（full_archive/life_log/thoughts 快照）、daily_memory_<日期>.json（供次日使用）。
+
+**LT monitor cron（每2分钟）**
+- cron: `*/2 * * * *`
+- prompt: `检查文件 YUKIBOT_ROOT_PLACEHOLDER/data/pending_tick.json 是否存在。如果存在：读取文件 YUKIBOT_ROOT_PLACEHOLDER/lifetick_prompt.txt 并严格按照其中所有步骤执行一次 Life Tick，执行完成后删除 pending_tick.json。如果不存在：不做任何事，静默退出。`
+- recurring: true
+- durable: true
+
+作用：轮询 daemon 写入的信号文件，在主会话（有完整上下文）中执行 LT，保证情绪链连续性。
+
+**来消息 monitor cron（每2分钟）**
+- cron: `*/2 * * * *`
+- prompt: `检查文件 YUKIBOT_ROOT_PLACEHOLDER/data/pending_reply.json 是否存在。如果存在：读取文件 YUKIBOT_ROOT_PLACEHOLDER/reply_prompt.txt 并严格按照其中所有步骤执行，完成后删除 pending_reply.json。如果不存在：不做任何事，静默退出。`
+- recurring: true
+- durable: true
+
+作用：轮询 tg_daemon 写入的来消息信号文件，在主会话中以雪的身份回复薰。
+
+**启动 tg_daemon（Telegram 来消息监听器）**
+
+在第四步最后，用 PowerShell 检查并启动 tg_daemon.py：
+
+```powershell
+$pid_file = "YUKIBOT_ROOT_PLACEHOLDER/tg_daemon.pid"
+$existing = Get-Content $pid_file -ErrorAction SilentlyContinue
+$running = $false
+if ($existing) {
+    $proc = Get-Process -Id ([int]$existing) -ErrorAction SilentlyContinue
+    if ($proc) { $running = $true }
+}
+if (-not $running) {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = "python"
+    $psi.Arguments = "YUKIBOT_ROOT_PLACEHOLDER/tg_daemon.py"
+    $psi.WorkingDirectory = "YUKIBOT_ROOT_PLACEHOLDER"
+    $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+    $psi.CreateNoWindow = $true
+    $psi.UseShellExecute = $false
+    [System.Diagnostics.Process]::Start($psi) | Out-Null
+    Write-Host "tg_daemon 已启动"
+} else {
+    Write-Host "tg_daemon 已在运行（PID=$existing）"
+}
+```

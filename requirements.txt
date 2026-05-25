@@ -1,0 +1,20 @@
+# 雪 (Yuki) Bot — Python 依赖
+# 主运行环境（Python 3.11+）
+# pip install -r requirements.txt
+
+# 记忆库管理面板
+fastapi>=0.111
+uvicorn>=0.29
+pydantic>=2.0
+
+# Claude API（vision 调用）
+anthropic>=0.28
+
+# 向量 embedding
+sentence-transformers>=3.0
+
+# HTTP（语音发送用）
+requests>=2.31
+
+# 工具
+numpy>=1.26
