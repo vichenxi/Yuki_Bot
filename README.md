@@ -325,6 +325,13 @@ grep "a3f7b2c1" handle_reply.log
 
 ## 修复日志 / Changelog
 
+### 2026-06-18（晚）— 发布前脱敏 + 忽略规则加固，架构更新推送
+
+- **脱敏**：`prompts/lifetick_prompt.txt`、`dev/tests/test_headless.py` 里硬编码的个人 Telegram `chat_id` 已替换为 `YOUR_CHAT_ID` 占位符（仓库为公开 remote，避免外泄个人信息）。
+- **`.gitignore` 加固**：新增 `node_modules/`、`*.vrm`、`*.vroid`——`git add -A` 误纳入的 `desktop/node_modules/`（数千依赖文件）与 27MB 形象模型（`Yuki.vrm`/`Yuki.vroid`）已撤出暂存、不再提交。
+- **推送**：架构更新提交并推送到 `origin/main`（97 文件：`core/`/`memory/`/`prompts/`/`desktop/`/`dev/`/docs）。再次确认 **无 memory（`data/`、`*.db`、日记/LT/归档）、无 bot token** 进入提交。
+- 验证：`git ls-files` 无敏感文件、待提交文件内搜不到 token、`index.html`(18MB) 经核为打包前端 JS 而非嵌入对话数据。
+
 ### 2026-06-18 — 接通 API 路由 + 个人数据归一防外泄 + 新增独立脚本
 
 **API 路由接通（回复 / 记忆提取改用 `llm_client`）**
