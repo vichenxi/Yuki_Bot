@@ -23,35 +23,49 @@ from datetime import datetime
 def get_life_context(date: str) -> dict:
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT ts, activity, mood, mood_intensity, emotional_note, should_message, message_type, message_seed, sleeping, offline "
+            "SELECT ts, activity, mood, mood_intensity, mood_valence, emotional_note, should_message, message_type, message_seed, sleeping, offline "
             "FROM life_logs WHERE date=? ORDER BY ts",
             (date,),
         ).fetchall()
         last = rows[-1] if rows else None
         today_sent = sum(1 for r in rows if r["should_message"])
+
+    def row_to_dict(r):
+        d = dict(r)
+        # expose mood_intensity as mood_arousal for clarity
+        d["mood_arousal"] = d.pop("mood_intensity", None)
+        return d
+
     return {
         "date": date,
-        "entries": [dict(r) for r in rows],
+        "entries": [row_to_dict(r) for r in rows],
         "last_ts": last["ts"] if last else None,
         "last_mood": last["mood"] if last else None,
+        "last_valence": last["mood_valence"] if last else None,
+        "last_arousal": last["mood_intensity"] if last else None,
         "today_sent": today_sent,
     }
 
 
 def add_life_log(entry: dict):
     date = entry.get("ts", now8())[:10]
-    intensity = entry.get("mood_intensity", None)
-    if intensity is not None:
-        intensity = float(intensity)
+    # accept mood_arousal (new name) or mood_intensity (legacy) for the arousal column
+    arousal = entry.get("mood_arousal", entry.get("mood_intensity", None))
+    if arousal is not None:
+        arousal = float(arousal)
+    valence = entry.get("mood_valence", None)
+    if valence is not None:
+        valence = float(valence)
     with get_db() as conn:
         conn.execute(
-            "INSERT INTO life_logs(ts,activity,mood,mood_intensity,emotional_note,should_message,message_type,message_seed,sleeping,offline,date) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO life_logs(ts,activity,mood,mood_intensity,mood_valence,emotional_note,should_message,message_type,message_seed,sleeping,offline,date) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 entry.get("ts", now8()),
                 entry.get("activity", ""),
                 entry.get("mood", "unknown"),
-                intensity,
+                arousal,
+                valence,
                 entry.get("emotional_note", ""),
                 int(entry.get("should_message", False)),
                 entry.get("message_type", "none"),

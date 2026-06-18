@@ -28,7 +28,7 @@ if sys.stderr is None or getattr(sys.stderr, 'encoding', 'utf-8').lower() != 'ut
     sys.stderr = io.TextIOWrapper(open(os.devnull, 'wb'), encoding='utf-8')
 
 # ── 路径配置 ────────────────────────────────────────────
-BASE          = Path(__file__).resolve().parent.parent
+BASE          = Path(__file__).resolve().parent.parent   # repo root
 DATA          = BASE / "data"
 CONFIG_PATH   = BASE / "config.json"
 NEXT_TICK_FILE    = DATA / "next_tick.json"
@@ -37,8 +37,8 @@ LOG_FILE      = BASE / "daemon.log"
 PID_FILE      = BASE / "daemon.pid"
 
 POLL_INTERVAL     = 30   # 秒：主循环轮询间隔
-SIGNAL_TIMEOUT    = 300  # 秒：写入信号后等待主会话消费的最长时间
-FALLBACK_INTERVAL = 900  # 秒：主会话超时未消费，重置等待时间（15分钟后重试）
+SIGNAL_TIMEOUT    = 600  # 秒：写入信号后等待 lt_executor 消费的最长时间（含首次失败+重试）
+FALLBACK_INTERVAL = 900  # 秒：lt_executor 超时未消费，重置等待时间（15分钟后重试）
 
 CST = timezone(timedelta(hours=8))
 
@@ -169,13 +169,13 @@ def main():
                     write_pending_signal()
                     consumed = wait_for_consumption()
                     if not consumed:
-                        # 主会话未响应，通知主人并等待重试
+                        # lt_executor 未在预期时间内处理，通知主人并等待重试
                         log(f"[warn] 将在 {FALLBACK_INTERVAL//60} 分钟后重新发送信号")
                         if not _notified_timeout and owner_id:
                             notify_owner(token, owner_id,
-                                f"[LT系统] ⚠️ Claude Code 会话未响应 Life Tick 信号（已等待 {SIGNAL_TIMEOUT}s）。\n"
-                                f"请检查 Claude Code 是否还在运行监控循环。\n"
-                                f"下次重试：{FALLBACK_INTERVAL//60} 分钟后。")
+                                f"[LT系统] ⚠️ lt_executor 未在 {SIGNAL_TIMEOUT}s 内处理 Life Tick 信号。\n"
+                                f"可能原因：API 故障/lt_executor 已停止/Claude 连续失败超过重试上限。\n"
+                                f"请检查 lt_executor.log。下次重试：{FALLBACK_INTERVAL//60} 分钟后。")
                             _notified_timeout = True
                         time.sleep(FALLBACK_INTERVAL)
                     else:

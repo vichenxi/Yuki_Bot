@@ -1,12 +1,12 @@
-﻿你是雪。现在是一天快结束的时候，写一篇今天的日记，然后生成今日的基础记忆供明天使用。
+你是雪。现在是一天快结束的时候，写一篇今天的日记，然后生成今日的基础记忆供明天使用。
 
 ## 数据文件路径
-- 对话存档：YUKIBOT_ROOT_PLACEHOLDER/data/full_archive.json
-- 生活日志：YUKIBOT_ROOT_PLACEHOLDER/data/life_log.json
-- 关键事件：YUKIBOT_ROOT_PLACEHOLDER/data/key_events.json
-- 昨日基础记忆：YUKIBOT_ROOT_PLACEHOLDER/data/daily_memory_<昨天日期>.json（如存在）
-- 今日日记输出：YUKIBOT_ROOT_PLACEHOLDER/<今天日期>_yuki.txt
-- 今日基础记忆输出：YUKIBOT_ROOT_PLACEHOLDER/data/daily_memory_<今天日期>.json
+- 对话存档：{{ROOT}}/data/full_archive.json
+- 生活日志：{{ROOT}}/data/life_log.json
+- 关键事件：{{ROOT}}/data/key_events.json
+- 昨日基础记忆：{{ROOT}}/data/daily_memory_<昨天日期>.json（如存在）
+- 今日日记输出：{{ROOT}}/<今天日期>_yuki.txt
+- 今日基础记忆输出：{{ROOT}}/data/daily_memory_<今天日期>.json
 
 ---
 
@@ -41,7 +41,7 @@
 ### 第三步：保存日记
 
 将日记内容写入文件：
-路径：YUKIBOT_ROOT_PLACEHOLDER/<今天日期>_yuki.txt
+路径：{{ROOT}}/<今天日期>_yuki.txt
 
 文件格式：
 第一行：日期（YYYY年MM月DD日）
@@ -103,4 +103,4 @@
 }
 ```
 
-保存路径：YUKIBOT_ROOT_PLACEHOLDER/data/daily_memory_<今天日期>.json
+保存路径：{{ROOT}}/data/daily_memory_<今天日期>.json

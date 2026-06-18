@@ -11,10 +11,8 @@ import os
 import sys
 import tempfile
 import urllib.request
-from pathlib import Path
 
-_BASE = Path(os.path.dirname(__file__)).resolve().parent
-CONFIG_PATH = str(_BASE / "config.json")
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 MODEL_PATH = r"E:\stable-diffusion-webui\models\Stable-Diffusion\Realistic_Vision_V5.1_fp16.safetensors"
 
 # 手机随拍风格词

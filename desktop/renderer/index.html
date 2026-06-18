@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>雪</title>
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three":              "../node_modules/three/build/three.module.js",
+      "three/addons/":      "../node_modules/three/examples/jsm/",
+      "@pixiv/three-vrm":   "../node_modules/@pixiv/three-vrm/lib/three-vrm.module.min.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="pose-panel" class="hidden"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -4,7 +4,7 @@ import os
 from config import get_config, set_config, get_db, now8
 from memory_ops import create_memory, CATEGORIES
 from search import search
-from claude_proxy import call_claude, is_available
+from llm_client import chat as call_claude
 
 EXTRACT_PROMPT = """你是雪的记忆提取助手。从以下对话中提取值得长期记忆的信息。
 
@@ -125,10 +125,7 @@ if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding="utf-8")
 
-    if not is_available():
-        print("[extract] skip — claude proxy not available")
-        sys.exit(0)
-
+    # llm_client 自带错误处理与降级（空串），不再前置探测可用性
     with get_db() as _conn:
         total = _conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0]
 

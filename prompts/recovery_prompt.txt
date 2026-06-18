@@ -1,10 +1,10 @@
-﻿你是雪的 Life Tick 系统。现在执行一次**手动断联恢复**。
+你是雪的 Life Tick 系统。现在执行一次**手动断联恢复**。
 
 ## 数据文件路径
-- 对话存档：YUKIBOT_ROOT_PLACEHOLDER/data/full_archive.json
-- 生活日志：YUKIBOT_ROOT_PLACEHOLDER/data/life_log.json
-- 关键事件：YUKIBOT_ROOT_PLACEHOLDER/data/key_events.json
-- 当日 Life Tick 记录：YUKIBOT_ROOT_PLACEHOLDER/data/logs/<今天日期>_yuki_lt.txt
+- 对话存档：{{ROOT}}/data/full_archive.json
+- 生活日志：{{ROOT}}/data/life_log.json
+- 关键事件：{{ROOT}}/data/key_events.json
+- 当日 Life Tick 记录：{{ROOT}}/<今天日期>_yuki_lt.txt
 
 ---
 
@@ -69,13 +69,13 @@ activity 要具体自然（像正常 tick 一样），mood 用一个词。
 
 ---
 
-## 第四步：重建每日固定 cron
+## 第四步：重建每日固定 cron + 启动后台守护进程
 
 调度以下两个 cron（每次 session 恢复时都执行，确保任务存在）：
 
 **归档 cron（每日 00:01）**
 - cron: `1 0 * * *`
-- prompt: `读取文件 YUKIBOT_ROOT_PLACEHOLDER/archive_prompt.txt 并严格按照其中的步骤执行归档任务。`
+- prompt: `读取文件 {{ROOT}}/archive_prompt.txt 并严格按照其中的步骤执行归档任务。`
 - recurring: true
 - durable: true
 
@@ -83,34 +83,25 @@ activity 要具体自然（像正常 tick 一样），mood 用一个词。
 
 **日记 cron（每日 23:00）**
 - cron: `0 23 * * *`
-- prompt: `读取文件 YUKIBOT_ROOT_PLACEHOLDER/diary_prompt.txt 并严格按照其中所有步骤执行。今天的日期是北京时间当天日期（UTC+8）。`
+- prompt: `读取文件 {{ROOT}}/diary_prompt.txt 并严格按照其中所有步骤执行。今天的日期是北京时间当天日期（UTC+8）。`
 - recurring: true
 - durable: true
 
 作用：每天 23:00 生成当日日记（<日期>_yuki.txt）、数据备份（full_archive/life_log/thoughts 快照）、daily_memory_<日期>.json（供次日使用）。
 
-**LT monitor cron（每2分钟）**
-- cron: `*/2 * * * *`
-- prompt: `检查文件 YUKIBOT_ROOT_PLACEHOLDER/data/pending_tick.json 是否存在。如果存在：读取文件 YUKIBOT_ROOT_PLACEHOLDER/lifetick_prompt.txt 并严格按照其中所有步骤执行一次 Life Tick，执行完成后删除 pending_tick.json。如果不存在：不做任何事，静默退出。`
-- recurring: true
-- durable: true
+> ⚠️ LT monitor cron 和 来消息 monitor cron 已移除。
+> LT 执行由独立进程 lt_executor.py 负责，不再占用主会话。
+> Telegram 回复由 tg_daemon.py → handle_reply.py 独立处理。
 
-作用：轮询 daemon 写入的信号文件，在主会话（有完整上下文）中执行 LT，保证情绪链连续性。
+---
 
-**来消息 monitor cron（每2分钟）**
-- cron: `*/2 * * * *`
-- prompt: `检查文件 YUKIBOT_ROOT_PLACEHOLDER/data/pending_reply.json 是否存在。如果存在：读取文件 YUKIBOT_ROOT_PLACEHOLDER/reply_prompt.txt 并严格按照其中所有步骤执行，完成后删除 pending_reply.json。如果不存在：不做任何事，静默退出。`
-- recurring: true
-- durable: true
+**启动后台守护进程（每次 session 恢复时在第四步末执行）**
 
-作用：轮询 tg_daemon 写入的来消息信号文件，在主会话中以雪的身份回复薰。
-
-**启动 tg_daemon（Telegram 来消息监听器）**
-
-在第四步最后，用 PowerShell 检查并启动 tg_daemon.py：
+用 PowerShell 依次检查并启动三个守护进程：
 
 ```powershell
-$pid_file = "YUKIBOT_ROOT_PLACEHOLDER/tg_daemon.pid"
+# ── 1. lt_daemon（LT 计时器）──────────────────────────────────
+$pid_file = "{{ROOT}}/daemon.pid"
 $existing = Get-Content $pid_file -ErrorAction SilentlyContinue
 $running = $false
 if ($existing) {
@@ -118,16 +109,25 @@ if ($existing) {
     if ($proc) { $running = $true }
 }
 if (-not $running) {
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = "python"
-    $psi.Arguments = "YUKIBOT_ROOT_PLACEHOLDER/tg_daemon.py"
-    $psi.WorkingDirectory = "YUKIBOT_ROOT_PLACEHOLDER"
-    $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
-    $psi.CreateNoWindow = $true
-    $psi.UseShellExecute = $false
-    [System.Diagnostics.Process]::Start($psi) | Out-Null
-    Write-Host "tg_daemon 已启动"
+    Start-Process -FilePath "pythonw" `
+        -ArgumentList "{{ROOT}}/lt_daemon.py" `
+        -WorkingDirectory "{{ROOT}}" `
+        -WindowStyle Hidden
+    Write-Host "lt_daemon 已启动"
 } else {
-    Write-Host "tg_daemon 已在运行（PID=$existing）"
+    Write-Host "lt_daemon 已在运行（PID=$existing）"
 }
+
+# ── 2. WSL2 tmux 会话 "yuki"（主会话，真实 PTY，订阅计费）────────
+$tmuxCheck = wsl -- tmux has-session -t yuki 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "WSL2 tmux 会话 'yuki' 未运行，启动中..."
+    powershell -File "{{ROOT}}/start_tmux_mode.ps1"
+} else {
+    Write-Host "WSL2 tmux 会话 'yuki' 已在运行"
+}
+
+# ── 注意：tmux 模式下 lt_executor 和 tg_daemon 由 tmux 会话接管 ──
+# ── 以下两个守护进程在 tmux 模式下不需要启动 ────────────────────
+Write-Host "tmux 模式：lt_executor / tg_daemon 由 WSL2 会话管理，跳过"
 ```

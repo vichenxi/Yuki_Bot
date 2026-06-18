@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi import FastAPI, HTTPException, Query, Body
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from config import get_all_config, set_config, get_db, now8
@@ -30,6 +31,16 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 PANEL_HTML = Path(__file__).parent / "index.html"
 YUKIBOT_DIR = Path(__file__).parent.parent.parent
 PROFILE_DIR = YUKIBOT_DIR / "data" / "profiles"
+DESKTOP_DIR = Path("F:/bot/desktop")
+VRM_FILE    = Path("F:/bot/Yuki.vrm")
+
+# Serve Three.js + three-vrm locally so admin panel works offline
+_three_dir    = DESKTOP_DIR / "node_modules" / "three"
+_three_vrm_dir = DESKTOP_DIR / "node_modules" / "@pixiv" / "three-vrm" / "lib"
+if _three_dir.exists():
+    app.mount("/static/three", StaticFiles(directory=str(_three_dir)), name="three")
+if _three_vrm_dir.exists():
+    app.mount("/static/three-vrm", StaticFiles(directory=str(_three_vrm_dir)), name="three-vrm")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -42,6 +53,23 @@ async def admin_ui():
 @app.get("/health")
 async def health():
     return {"status": "ok", "ts": now8()}
+
+
+# ── VRM Model ─────────────────────────────────────────────────────────────────
+
+@app.get("/model/vrm")
+async def get_vrm_model():
+    if not VRM_FILE.exists():
+        raise HTTPException(404, "VRM file not found")
+    return FileResponse(str(VRM_FILE), media_type="model/gltf-binary")
+
+
+@app.get("/vrm-viewer", response_class=HTMLResponse)
+async def vrm_viewer():
+    p = Path(__file__).parent / "vrm_viewer.html"
+    if not p.exists():
+        raise HTTPException(404, "VRM viewer not found")
+    return p.read_text(encoding="utf-8")
 
 
 # ── Status ────────────────────────────────────────────────────────────────────
@@ -85,7 +113,7 @@ async def get_status():
 
     with get_db() as conn:
         today_logs = conn.execute(
-            "SELECT ts, mood FROM life_logs WHERE date=? ORDER BY ts",
+            "SELECT ts, mood, mood_valence FROM life_logs WHERE date=? ORDER BY ts",
             (today,)
         ).fetchall()
 
@@ -98,7 +126,7 @@ async def get_status():
         "latest_asst_msg": dict(latest_asst_msg) if latest_asst_msg else None,
         "next_tick": next_tick,
         "emotional_arc": emotional_arc,
-        "today_logs": [{"ts": r["ts"], "mood": r["mood"]} for r in today_logs],
+        "today_logs": [{"ts": r["ts"], "mood": r["mood"], "v": r["mood_valence"]} for r in today_logs],
     }
 
 
@@ -127,7 +155,7 @@ async def update_config(key: str, body: ConfigUpdate):
 @app.get("/diaries")
 async def list_diaries():
     diary_files = sorted(
-        [f for f in (YUKIBOT_DIR / "data" / "logs").glob("*_yuki.txt") if "_lt" not in f.name],
+        [f for f in YUKIBOT_DIR.glob("*_yuki.txt") if "_lt" not in f.name],
         reverse=True,
     )
     result = []
@@ -357,6 +385,126 @@ async def get_lifelogs(date: Optional[str] = None, limit: int = 50):
                 "SELECT * FROM life_logs ORDER BY ts DESC LIMIT ?", (limit,)
             ).fetchall()
     return {"logs": [dict(r) for r in rows]}
+
+
+# ── Bot Config (config.json) ──────────────────────────────────────────────────
+
+BOT_CONFIG_PATH = YUKIBOT_DIR / "config.json"
+BOT_CONFIG_KEYS = [
+    "gpt_model_path", "sovits_model_path", "ref_audio_path",
+    "ref_text", "voice_lang", "gptsovits_api",
+]
+BOT_CONFIG_LABELS = {
+    "gpt_model_path":    "GPT 权重路径 (.ckpt)",
+    "sovits_model_path": "SoVITS 权重路径 (.pth)",
+    "ref_audio_path":    "参考音频路径 (.wav)",
+    "ref_text":          "参考音频文本",
+    "voice_lang":        "合成语言 (zh / ja / en)",
+    "gptsovits_api":     "GPT-SoVITS API 地址",
+}
+
+
+def _read_bot_config() -> dict:
+    return json.loads(BOT_CONFIG_PATH.read_text(encoding="utf-8"))
+
+
+def _write_bot_config(cfg: dict):
+    BOT_CONFIG_PATH.write_text(
+        json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+@app.get("/bot-config")
+async def get_bot_config():
+    cfg = _read_bot_config()
+    return {
+        k: {"value": cfg.get(k, ""), "label": BOT_CONFIG_LABELS.get(k, k)}
+        for k in BOT_CONFIG_KEYS
+    }
+
+
+class BotConfigUpdate(BaseModel):
+    value: str
+
+
+@app.put("/bot-config/{key}")
+async def update_bot_config(key: str, body: BotConfigUpdate):
+    if key not in BOT_CONFIG_KEYS:
+        raise HTTPException(400, f"key '{key}' not allowed")
+    cfg = _read_bot_config()
+    cfg[key] = body.value
+    _write_bot_config(cfg)
+    return {"ok": True}
+
+
+@app.post("/bot-config/apply-weights")
+async def apply_weights():
+    """Hot-switch GPT-SoVITS model weights via running API."""
+    import urllib.request as _req, urllib.parse as _parse
+    cfg = _read_bot_config()
+    api = cfg.get("gptsovits_api", "http://127.0.0.1:9880")
+    results = {}
+    for endpoint, key in [("set_gpt_weights", "gpt_model_path"),
+                           ("set_sovits_weights", "sovits_model_path")]:
+        url = f"{api}/{endpoint}?weights_path={_parse.quote(cfg.get(key,''), safe='')}"
+        try:
+            with _req.urlopen(url, timeout=15) as r:
+                results[endpoint] = json.loads(r.read()).get("message", "ok")
+        except Exception as e:
+            results[endpoint] = f"error: {e}"
+    return results
+
+
+@app.post("/bot-config/test-voice")
+async def test_voice():
+    """Synthesize a short test sentence and return audio as base64."""
+    import urllib.request as _req, base64 as _b64
+    cfg = _read_bot_config()
+    api = cfg.get("gptsovits_api", "http://127.0.0.1:9880")
+    lang = cfg.get("voice_lang", "zh")
+    payload = json.dumps({
+        "text": "好的，我知道了。",
+        "text_lang": lang,
+        "ref_audio_path": cfg["ref_audio_path"],
+        "prompt_text": cfg["ref_text"],
+        "prompt_lang": lang,
+        "media_type": "wav",
+        "streaming_mode": False,
+        "top_k": 5, "top_p": 1.0, "temperature": 1.0,
+        "speed_factor": 1.0, "repetition_penalty": 1.35,
+    }, ensure_ascii=False).encode("utf-8")
+    try:
+        req = _req.Request(f"{api}/tts", data=payload,
+                           headers={"Content-Type": "application/json"})
+        with _req.urlopen(req, timeout=60) as r:
+            audio = r.read()
+        return {"ok": True, "audio_b64": _b64.b64encode(audio).decode(), "size": len(audio)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.get("/bot-config/voice-status")
+async def voice_status():
+    import urllib.request as _req
+    cfg = _read_bot_config()
+    api = cfg.get("gptsovits_api", "http://127.0.0.1:9880")
+    try:
+        _req.urlopen(api, timeout=3)
+        return {"online": True, "api": api}
+    except Exception as e:
+        try:
+            import urllib.error
+            if isinstance(e, urllib.error.HTTPError):
+                return {"online": True, "api": api}
+        except Exception:
+            pass
+        return {"online": False, "api": api, "error": str(e)}
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page():
+    p = Path(__file__).parent / "settings.html"
+    return p.read_text(encoding="utf-8")
 
 
 if __name__ == "__main__":

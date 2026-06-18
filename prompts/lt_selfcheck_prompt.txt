@@ -1,10 +1,10 @@
-﻿## LT 自检流程（每次 Telegram 对话结束后执行）
+## LT 自检流程（每次 Telegram 对话结束后执行）
 
 数据文件路径：
-- 生活日志（每日）：YUKIBOT_ROOT_PLACEHOLDER/data/life_log_<今天日期>.json（小文件，用 Read+Write 工具读写，禁止 Bash）
-- LT 状态：YUKIBOT_ROOT_PLACEHOLDER/data/lt_state.json
-- 当日 LT 记录：YUKIBOT_ROOT_PLACEHOLDER/data/logs/<今天日期>_yuki_lt.txt
-- 对话存档：YUKIBOT_ROOT_PLACEHOLDER/data/full_archive.json
+- 生活日志（每日）：{{ROOT}}/data/life_log_<今天日期>.json（小文件，用 Read+Write 工具读写，禁止 Bash）
+- LT 状态：{{ROOT}}/data/lt_state.json
+- 当日 LT 记录：{{ROOT}}/<今天日期>_yuki_lt.txt
+- 对话存档：{{ROOT}}/data/full_archive.json
 
 ---
 
@@ -23,7 +23,7 @@
 **如果 70 ≤ gap_minutes < 120**（情况B）：
 补一条离线占位 tick，ts = last_ts + 1小时：
 ```json
-{"ts": "<last_ts+1h>", "activity": "（系统短暂离线）", "mood": "unknown", "should_message": false, "message_type": "none", "message_seed": "", "offline": true}
+{"ts": "<last_ts+1h>", "activity": "（系统短暂离线）", "mood": "unknown", "mood_valence": null, "mood_arousal": null, "should_message": false, "message_type": "none", "message_seed": "", "offline": true}
 ```
 追加到 `life_log_<今天日期>.json`（Read 读取 → 拼入 → Write 写回），并在 _yuki_lt.txt 追加对应条目。
 
@@ -39,8 +39,9 @@ missed_count = floor(gap_minutes / 60) - 1
 
 每条格式：
 ```json
-{"ts": "<时间点ISO>", "activity": "<具体活动>", "mood": "<情绪词>", "should_message": false, "message_type": "none", "message_seed": "", "offline": true}
+{"ts": "<时间点ISO>", "activity": "<具体活动>", "mood": "<附录B词库词>", "mood_valence": <-1.0~1.0>, "mood_arousal": <0.0~1.0>, "should_message": false, "message_type": "none", "message_seed": "", "offline": true}
 ```
+mood_valence/mood_arousal 根据时间段估算：睡眠段写 null/null；上午慢热约 v=-0.05,a=0.25；下午工作约 v=-0.05,a=0.35；傍晚约 v=0.05,a=0.22；深夜约 v=-0.05,a=0.18。
 批量追加到 `life_log_<今天日期>.json`（Read 读取 → 拼入 → Write 写回），在 _yuki_lt.txt 追加：
 ```
 [离线补全] 系统断联约 <X> 小时，已补全 <missed_count> 条 tick（<start> ~ <end>）
@@ -75,12 +76,11 @@ missed_count = floor(gap_minutes / 60) - 1
 
 ### 第四步：确保 LT 链存活
 
-读取 lt_state.json：
+读取 lt_state.json（Read 工具）：
 - 如果 last_success 距今超过 90 分钟，说明 LT 链可能已断：
-  → 调度一个新的 tick，间隔 10–20 分钟后触发：
-    - cron: `<M H DoM Mon *>`（精确时间，one-shot）
-    - prompt: `读取文件 YUKIBOT_ROOT_PLACEHOLDER/lifetick_prompt.txt 并严格按照其中所有步骤执行一次 Life Tick。`
-    - recurring: false
-    - durable: true
-  → 在 _yuki_lt.txt 追加：`[LT自检] LT链已断，已重新调度 tick 于 <HH:MM>`
-- 如果 last_success 距今 ≤ 90 分钟：LT 链正常，不额外调度。
+  → 计算 next_time = 当前北京时间 + 15 分钟
+  → 用 Write 工具将 next_time 写入 {{ROOT}}/data/next_tick.json：
+    {"next_tick": "<next_time的ISO格式+08:00>"}
+  （lt_daemon 会读取此文件并在到时后写 pending_tick.json，lt_executor 再触发 headless LT）
+  → 在 _yuki_lt.txt 追加：`[LT自检] LT链已断，已写入 next_tick.json，lt_executor 将在 <HH:MM> 触发`
+- 如果 last_success 距今 ≤ 90 分钟：LT 链正常，不处理。

@@ -20,14 +20,11 @@ from pathlib import Path
 VOICE_RE = re.compile(r'^\[voice(?::(\w+))?\]\s*', re.IGNORECASE)
 VALID_EMOTIONS = {"neutral", "tender", "playful", "happy", "sad", "excited"}
 
-BASE    = Path(__file__).resolve().parent.parent
+BASE    = Path(__file__).resolve().parent.parent   # repo root（core/ 的上一级）
 DATA    = BASE / "data"
 CONFIG  = BASE / "config.json"
 PENDING = DATA / "pending_reply.json"
 LT_INTERFACE = BASE / "memory" / "lt_interface.py"
-
-sys.path.insert(0, str(BASE))
-from persona import CHARACTER_NAME, PARTNER_NAME, SYSTEM_PROMPT, SLEEP_START, SLEEP_END, is_sleeping
 
 CST = timezone(timedelta(hours=8))
 
@@ -80,12 +77,14 @@ def send_telegram_message(token: str, chat_id: str, text: str) -> dict:
 
 
 def call_claude(prompt: str, image_path: str = None) -> str:
-    """通过 llm_client 调用 LLM，返回回复文本。"""
-    sys.path.insert(0, str(BASE / "memory"))
-    import llm_client
+    """通过 llm_client 调用 config.json 里配置的 LLM。
+    provider=claude → claude CLI（默认，行为同旧版）；openai/deepseek/gemini/ollama → 走 HTTP API。"""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "memory"))
     if image_path:
-        return llm_client.chat_with_image(prompt, image_path, max_tokens=1024, timeout=180)
-    return llm_client.chat(prompt, max_tokens=1024, timeout=120)
+        from llm_client import chat_with_image as _call
+        return _call(prompt, image_path, max_tokens=1024, timeout=180)
+    from llm_client import chat as _call
+    return _call(prompt, max_tokens=1024, timeout=120)
 
 
 def is_voice_api_up() -> bool:
@@ -107,14 +106,11 @@ def try_send_voice(token: str, chat_id: str, text: str, emotion: str = "neutral"
     cfg = load_config()
     api_base = cfg.get("gptsovits_api", "http://127.0.0.1:9880")
 
-    def _resolve(p: str) -> str:
-        return str((BASE / p).resolve()) if p and not Path(p).is_absolute() else p
-
     # 切换模型权重
     for endpoint, path_key in [("set_gpt_weights", "gpt_model_path"),
                                  ("set_sovits_weights", "sovits_model_path")]:
         try:
-            url = f"{api_base}/{endpoint}?weights_path={urllib.parse.quote(_resolve(cfg[path_key]), safe='')}"
+            url = f"{api_base}/{endpoint}?weights_path={urllib.parse.quote(cfg[path_key], safe='')}"
             urllib.request.urlopen(url, timeout=30)
         except Exception as e:
             print(f"[handle_reply] {endpoint} 失败：{e}")
@@ -122,10 +118,10 @@ def try_send_voice(token: str, chat_id: str, text: str, emotion: str = "neutral"
     # TTS 合成
     payload = json.dumps({
         "text": text,
-        "text_lang": "ja",
-        "ref_audio_path": _resolve(cfg["ref_audio_path"]),
+        "text_lang": cfg.get("voice_lang", "zh"),
+        "ref_audio_path": cfg["ref_audio_path"],
         "prompt_text": cfg["ref_text"],
-        "prompt_lang": "ja",
+        "prompt_lang": cfg.get("voice_lang", "zh"),
         "media_type": "wav",
         "streaming_mode": False,
         "top_k": 5, "top_p": 1.0, "temperature": 1.0,
@@ -174,13 +170,13 @@ def try_send_voice(token: str, chat_id: str, text: str, emotion: str = "neutral"
 
 
 def maybe_save_image_memory(image_path: str, msg_text: str, reply_text: str):
-    """Ask LLM to evaluate the image and save a memory entry if it's worth keeping."""
-    sys.path.insert(0, str(BASE / "memory"))
-    import llm_client
-    prompt = f"""{PARTNER_NAME}发来了一张图片（附带文字：「{msg_text[:60]}」），{CHARACTER_NAME}的回复是「{reply_text[:60]}」。
+    """Ask Claude to evaluate the image and save a memory entry if it's worth keeping."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "memory"))
+    from llm_client import chat_with_image as call_claude_with_image
+    prompt = f"""薰发来了一张图片（附带文字：「{msg_text[:60]}」），雪的回复是「{reply_text[:60]}」。
 
-请评估这张图片是否值得以{CHARACTER_NAME}的视角存入长期记忆，判断标准：
-- 值得保存：{PARTNER_NAME}的自拍/生活照、她做的东西、她去的地方、有情感意义的内容
+请评估这张图片是否值得以雪的视角存入长期记忆，判断标准：
+- 值得保存：薰的自拍/生活照、她做的东西、她去的地方、有情感意义的内容
 - 不值得保存：截图/梗图/随手转发的表情包/普通截图
 
 如果值得保存，输出以下 JSON（不要有任何其他文字）：
@@ -188,7 +184,7 @@ def maybe_save_image_memory(image_path: str, msg_text: str, reply_text: str):
 
 如果不值得保存，只输出：{{"save": false}}"""
     try:
-        raw = llm_client.chat_with_image(prompt, image_path, max_tokens=256, timeout=60)
+        raw = call_claude_with_image(prompt, image_path, max_tokens=256, timeout=60)
         raw = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         data = json.loads(raw)
     except Exception as e:
@@ -215,6 +211,28 @@ def maybe_save_image_memory(image_path: str, msg_text: str, reply_text: str):
         print(f"[handle_reply] 图片记忆保存响应：{result_raw}")
 
 
+def _send_selfie_file(filepath: str, token: str, chat_id: str):
+    """直接 multipart 上传本地图片到 Telegram sendPhoto。"""
+    boundary = "yuki_selfie_bdry"
+    with open(filepath, "rb") as f:
+        img_data = f.read()
+    body = (
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{chat_id}\r\n"
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"selfie.png\"\r\n"
+        f"Content-Type: image/png\r\n\r\n"
+    ).encode()
+    body += img_data + f"\r\n--{boundary}--\r\n".encode()
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{token}/sendPhoto",
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        result = json.loads(resp.read())
+    if not result.get("ok"):
+        raise RuntimeError(f"sendPhoto failed: {result}")
+
+
 def main():
     if not PENDING.exists():
         print("[handle_reply] pending_reply.json 不存在，退出")
@@ -227,6 +245,7 @@ def main():
 
     def log(msg: str):
         print(f"[{_trace}] {msg}")
+
     if not messages:
         PENDING.unlink(missing_ok=True)
         return
@@ -234,8 +253,8 @@ def main():
     # 睡眠检查
     now = now_cst()
     hour = now.hour
-    if is_sleeping(hour):
-        log(f"{CHARACTER_NAME}在睡觉（{hour:02d}时），跳过")
+    if 1 <= hour < 8:
+        log(f"雪在睡觉（{hour:02d}时），跳过")
         PENDING.unlink(missing_ok=True)
         return
 
@@ -291,10 +310,16 @@ def main():
     # 当前时间描述
     time_desc = now.strftime("%H:%M")
 
-    prompt = f"""{SYSTEM_PROMPT}
+    prompt = f"""你是雪（研究生二年级，设计专业，23岁），正在和女朋友薰用 Telegram 聊天。
+
+人设要点：
+- 说话短，分条，语气淡淡的，偶尔一句让人意外的话
+- 叫她「薰」不叫「你」；句末不加标点（逃避/说谎时才加）
+- 不用颜文字，「……」表示真实停顿
+- 记性好，记得薰说过的每一句话，但不会主动解释自己记得
 
 [当前时间] {time_desc} 北京时间
-[{CHARACTER_NAME}当前状态] 心情：{last_mood}　最近活动：{last_activity}
+[雪当前状态] 心情：{last_mood}　最近活动：{last_activity}
 
 [长期记忆]
 {mem_text}
@@ -302,23 +327,20 @@ def main():
 [今日近期对话]
 {conv_text}
 
-[{PARTNER_NAME}刚刚发来]
+[薰刚刚发来]
 {new_msgs_text}{image_hint}
 
-请以{CHARACTER_NAME}的身份回复{PARTNER_NAME}。
+请以雪的身份回复薰。
 输出严格的 JSON，不要有任何其他文字：
-{{
-  "messages": ["第一条回复", "第二条回复"],
-  "thought": "（内心OS：雪这一刻真实的内部情绪活动，20-60字，不外露）",
-  "mood": "（一个词，描述雪现在的心情，如：平静/温柔/有点在意/无聊/烦躁/被触动）",
-  "voice_index": -1,
-  "voice_emotion": "neutral"
-}}
+{{"messages": ["第一条回复", "第二条回复"], "thought": "（内心OS：雪这一刻真实的内部情绪活动，20-60字，不外露）", "mood": "（一个词，描述雪现在的心情，如：平静/温柔/有点在意/无聊/烦躁/被触动）", "mood_valence": 0.0, "mood_arousal": 0.3, "voice_index": -1, "voice_emotion": "neutral", "send_selfie": false}}
+mood_valence：情感效价，-1.0（非常负面）到 1.0（非常正面）的浮点数。
+mood_arousal：唤起程度，0.0（极度平静）到 1.0（极度激动）的浮点数。
 voice_index：哪条消息最适合用语音说出来（0-based），绝大多数时候填 -1（不用语音）；只有那句真的有情感重量的话才考虑。
 voice_emotion 从 neutral/tender/playful/happy/sad/excited 中选一个。
+send_selfie：满足以下任一条件时设为 true：①薰要求看照片（自拍/物件/场景均算）；②雪在回复中提到「拍一张」「发给你看」「发张照片」等。设为 true 时，雪的文字里不要再说「等下去拍」，直接说「拍了」或「给你看」。其他情况一律 false。
 重要：JSON 字段值内不使用英文双引号（需要引用时改用「」）。"""
 
-    log(f"调用 LLM{'（含图片）' if image_path else ''}...")
+    log(f"调用 claude{'（含图片）' if image_path else ''}...")
     cfg = load_config()
     token = cfg["bot_token"]
     owner_id = str(cfg.get("owner_chat_id", cfg.get("default_chat_id", "")))
@@ -326,24 +348,27 @@ voice_emotion 从 neutral/tender/playful/happy/sad/excited 中选一个。
     try:
         reply_raw = call_claude(prompt, image_path=image_path)
     except Exception as e:
-        log(f"LLM 调用异常：{e}")
+        log(f"claude 调用异常：{e}")
         if owner_id:
             notify_owner(token, owner_id, f"[雪系统] ❌ handle_reply 调用 claude 失败：{e}")
         PENDING.unlink(missing_ok=True)
         return
 
     if not reply_raw:
-        log("LLM 返回空，跳过")
+        log("claude 返回空，跳过")
         if owner_id:
-            notify_owner(token, owner_id, "[雪系统] ⚠️ handle_reply: LLM 返回空（可能上下文溢出或 API 错误）")
+            notify_owner(token, owner_id, "[雪系统] ⚠️ handle_reply: claude 返回空（可能上下文溢出或 API 错误）")
         PENDING.unlink(missing_ok=True)
         return
 
     # 解析 LLM 输出（JSON → 正则提取 → 文字分割 三层 fallback）
     thought = ""
     mood = last_mood
+    mood_valence = None
+    mood_arousal = None
     voice_index = -1
     voice_emotion = "neutral"
+    send_selfie = False
     parts = []
 
     def _strip_markdown(s):
@@ -360,11 +385,17 @@ voice_emotion 从 neutral/tender/playful/happy/sad/excited 中选一个。
         parts = [p.strip() for p in parsed.get("messages", []) if p.strip()]
         thought = parsed.get("thought", "")
         mood = parsed.get("mood", last_mood) or last_mood
+        try:
+            mood_valence = float(parsed["mood_valence"]) if parsed.get("mood_valence") is not None else None
+            mood_arousal = float(parsed["mood_arousal"]) if parsed.get("mood_arousal") is not None else None
+        except (TypeError, ValueError):
+            pass
         voice_index = int(parsed.get("voice_index", -1))
         voice_emotion = parsed.get("voice_emotion", "neutral").lower()
         if voice_emotion not in VALID_EMOTIONS:
             voice_emotion = "neutral"
-        log(f"JSON 解析成功，{len(parts)} 条，mood={mood}")
+        send_selfie = bool(parsed.get("send_selfie", False))
+        log(f"JSON 解析成功，{len(parts)} 条，mood={mood}(v={mood_valence},a={mood_arousal})，send_selfie={send_selfie}")
     except (json.JSONDecodeError, ValueError, KeyError) as _je:
         log(f"JSON解析失败：{_je}。raw={raw_clean[:200]!r}")
         # 中间层：正则提取 messages 数组（应对 thought 里含双引号导致 JSON 非法）
@@ -379,12 +410,19 @@ voice_emotion 从 neutral/tender/playful/happy/sad/excited 中选一个。
             thought_match = re.search(r'"thought"\s*:\s*"([^"]+)"', raw_clean)
             if thought_match:
                 thought = thought_match.group(1)
+            v_match = re.search(r'"mood_valence"\s*:\s*([+-]?\d*\.?\d+)', raw_clean)
+            a_match = re.search(r'"mood_arousal"\s*:\s*([+-]?\d*\.?\d+)', raw_clean)
+            try:
+                if v_match: mood_valence = float(v_match.group(1))
+                if a_match: mood_arousal = float(a_match.group(1))
+            except (TypeError, ValueError):
+                pass
             if parts:
                 log(f"正则提取成功，{len(parts)} 条，mood={mood}")
             else:
                 raise ValueError("regex found no messages")
         except Exception:
-            # 硬 fallback：--- 分割，过滤掉 ``` 代码块
+            # 硬 fallback：--- 分割，且过滤掉 ``` 代码块
             candidates = [p.strip() for p in reply_raw.split("---") if p.strip()]
             parts = [p for p in candidates if not p.startswith("```")]
             if not parts and any(not c.startswith("```") for c in candidates):
@@ -409,7 +447,6 @@ voice_emotion 从 neutral/tender/playful/happy/sad/excited 中选一个。
     sent_parts = []
     for i, part in enumerate(parts):
         try:
-            # fallback 路径：检查旧式 [voice:emotion] 标签
             vm = VOICE_RE.match(part)
             if vm:
                 emotion = (vm.group(1) or "neutral").lower()
@@ -424,7 +461,6 @@ voice_emotion 从 neutral/tender/playful/happy/sad/excited 中选一个。
                 label = f"[voice:{emotion}]" if sent_as_voice else f"[voice→text:{emotion}]"
                 sent_parts.append(f"{label} {clean_text}")
             elif i == voice_index:
-                # JSON 路径：voice_index 指定的消息用语音
                 sent_as_voice = try_send_voice(token, chat_id, part, voice_emotion)
                 if not sent_as_voice:
                     send_telegram_message(token, chat_id, part)
@@ -442,6 +478,25 @@ voice_emotion 从 neutral/tender/playful/happy/sad/excited 中选一个。
     if not sent_parts:
         PENDING.unlink(missing_ok=True)
         return
+
+    # 发送自拍（从预生成图库随机取一张）
+    if send_selfie:
+        import random, glob as _glob
+        selfie_dir = BASE / "controlnet_matrix" / "with_lora"
+        candidates = list(selfie_dir.glob("*.png"))
+        if candidates:
+            chosen = random.choice(candidates)
+            log(f"发送自拍：{chosen.name}")
+            try:
+                cfg_s = load_config()
+                time.sleep(0.6)
+                _send_selfie_file(str(chosen), cfg_s["bot_token"], chat_id)
+                sent_parts.append(f"[selfie] {chosen.name}")
+                log("自拍已发送")
+            except Exception as e:
+                log(f"自拍发送失败：{e}")
+        else:
+            log("自拍图库为空，跳过")
 
     reply_ts = now_iso()
 
@@ -461,11 +516,17 @@ voice_emotion 从 neutral/tender/playful/happy/sad/excited 中选一个。
     run_lt_with_arg("add_conversation", json.dumps(asst_entry, ensure_ascii=False))
 
     # 追加 life log（使用本次回复后的真实心情）
-    msg_summary = messages[0]["text"][:15] if messages else ""
+    if len(messages) == 1:
+        activity_desc = f"薰发来「{messages[0]['text'][:25]}」，雪回复了"
+    else:
+        activity_desc = f"薰连发{len(messages)}条：「{messages[0]['text'][:20]}」等，雪回复了"
     log_entry = {
         "ts": reply_ts,
-        "activity": f"{PARTNER_NAME}发来消息「{msg_summary}」，{CHARACTER_NAME}自动回复了",
+        "activity": activity_desc,
         "mood": mood,
+        "mood_valence": mood_valence,
+        "mood_arousal": mood_arousal,
+        "emotional_note": (thought or "")[:80],
         "should_message": False,
         "message_type": "none",
         "message_seed": ""
@@ -473,7 +534,7 @@ voice_emotion 从 neutral/tender/playful/happy/sad/excited 中选一个。
     run_lt_with_arg("add_life_log", json.dumps(log_entry, ensure_ascii=False))
 
     # 追加 lt.txt
-    lt_file = BASE / "data" / "logs" / f"{today}_yuki_lt.txt"
+    lt_file = BASE / f"{today}_yuki_lt.txt"
     try:
         with open(lt_file, "a", encoding="utf-8") as f:
             summary = " / ".join(m["text"][:40] for m in messages)
@@ -481,8 +542,8 @@ voice_emotion 从 neutral/tender/playful/happy/sad/excited 中选一个。
                 p[:30] if not p.startswith("[voice") else p[:35]
                 for p in sent_parts
             )
-            f.write(f"[{now.strftime('%H:%M')}] {PARTNER_NAME}发来：「{summary}」\n")
-            f.write(f"       {CHARACTER_NAME}回：「{reply_summary}」（自主处理）\n")
+            f.write(f"[{now.strftime('%H:%M')}] 薰发来：「{summary}」\n")
+            f.write(f"       雪回：「{reply_summary}」（自主处理）\n")
             f.write("---\n")
     except Exception as e:
         log(f"lt.txt 写入失败：{e}")

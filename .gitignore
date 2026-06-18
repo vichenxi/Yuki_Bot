@@ -4,6 +4,20 @@ config.json
 # ── 运行时数据（对话记录、记忆、状态） ───────────────────────────────
 data/
 
+# ── 个人内容防外泄（即使误放到 data/ 之外也不提交） ──────────────────
+private/
+*_yuki.txt
+*_yuki_lt.txt
+yuki_export_*/
+*.db
+*.db.bak
+full_archive*
+daily_memory_*
+daily_events_*
+life_log*
+thoughts_*
+*.log
+
 # ── 大体积二进制模型 ─────────────────────────────────────────────────
 assets/voice_models/
 assets/lora/
@@ -19,3 +33,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 *.pid
+
+# ── 3D 模型（大体积二进制，含角色形象） ──
+*.vrm
+*.vroid

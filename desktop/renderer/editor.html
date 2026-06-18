@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Pose Editor — Yuki</title>
+  <link rel="stylesheet" href="editor.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../node_modules/three/build/three.module.js",
+      "three/addons/": "../node_modules/three/examples/jsm/",
+      "@pixiv/three-vrm": "../node_modules/@pixiv/three-vrm/lib/three-vrm.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="toolbar">
+    <span class="app-title">POSE EDITOR</span>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btn-undo" disabled title="Ctrl+Z">↩ Undo</button>
+    <button class="tb-btn" id="btn-redo" disabled title="Ctrl+Shift+Z">↪ Redo</button>
+    <div class="tb-sep"></div>
+    <button class="tab-btn active" data-tab="bones">骨骼</button>
+    <button class="tab-btn"        data-tab="expr">表情</button>
+    <button class="tab-btn"        data-tab="morphs">形态键</button>
+    <button class="tab-btn"        data-tab="presets">预设库</button>
+    <div class="spacer"></div>
+    <div class="preset-save-row">
+      <input id="preset-name-input" type="text" placeholder="预设名称…" autocomplete="off">
+      <button class="tb-btn accent" id="btn-save-preset">保存预设</button>
+    </div>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btn-reset">Reset</button>
+    <button class="tb-btn" id="btn-copy-json">Copy JSON</button>
+  </div>
+
+  <div id="main">
+    <!-- Left: body-part nav -->
+    <div id="part-nav">
+      <button class="part-btn active" data-part="spine">躯干</button>
+      <button class="part-btn"        data-part="head">头颈</button>
+      <button class="part-btn"        data-part="larm">左臂</button>
+      <button class="part-btn"        data-part="rarm">右臂</button>
+      <button class="part-btn"        data-part="lhand">左手</button>
+      <button class="part-btn"        data-part="rhand">右手</button>
+      <button class="part-btn"        data-part="lleg">左腿</button>
+      <button class="part-btn"        data-part="rleg">右腿</button>
+    </div>
+
+    <!-- Center: 3-D viewport + preset strip -->
+    <div id="viewport-wrap">
+      <canvas id="canvas"></canvas>
+      <div id="preset-strip">
+        <span class="strip-label">PRESETS</span>
+        <div id="preset-chips"></div>
+      </div>
+    </div>
+
+    <!-- Right: property panel -->
+    <div id="prop-panel"></div>
+  </div>
+
+  <script type="module" src="editor.js"></script>
+</body>
+</html>

@@ -1,20 +1,11 @@
 """生成雪的户外自拍并发给薰"""
 import torch, os, tempfile, json, urllib.request
-from pathlib import Path
 from diffusers import StableDiffusionPipeline
 from peft import PeftModel
 
-BASE        = Path(__file__).resolve().parent.parent
-CONFIG_PATH = BASE / "config.json"
-
-with open(CONFIG_PATH, encoding="utf-8") as f:
-    _cfg = json.load(f)
-
-def _resolve(p: str) -> str:
-    return str((BASE / p).resolve()) if p and not Path(p).is_absolute() else p
-
-MODEL_PATH = _resolve(_cfg.get("sd_model_path", ""))
-LORA_PATH  = _resolve(_cfg.get("lora_path", "./lora/yuki_lora"))
+MODEL_PATH  = r"E:\stable-diffusion-webui\models\Stable-Diffusion\AOM3A1B_orangemixs.safetensors"
+LORA_PATH   = r"C:\Users\Violet\.claude\yukibot\lora\yuki_lora"
+CONFIG_PATH = r"C:\Users\Violet\.claude\yukibot\config.json"
 
 PROMPT = (
     "yukixue, 1girl, solo, "
@@ -58,8 +49,11 @@ del pipe
 torch.cuda.empty_cache()
 print("生成完成，发送中...")
 
-token    = _cfg["bot_token"]
-chat_id  = str(_cfg["default_chat_id"])
+with open(CONFIG_PATH, encoding="utf-8") as f:
+    cfg = json.load(f)
+token = cfg["bot_token"]
+chat_id = str(cfg["default_chat_id"])
+
 boundary = "yuki_boundary_xyz"
 
 def part(name, val):

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script type="importmap">
+{
+  "imports": {
+    "three": "/static/three/build/three.module.js",
+    "three/addons/": "/static/three/examples/jsm/",
+    "@pixiv/three-vrm": "/static/three-vrm/three-vrm.module.min.js"
+  }
+}
+</script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #fdf9fb; width: 100%; height: 100vh; overflow: hidden; font-family: sans-serif; }
+#loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #a78bfa; font-size: 13px; pointer-events: none; }
+canvas { display: block; }
+#snap-btn {
+  position: absolute; bottom: 8px; right: 8px;
+  background: rgba(109,40,217,0.75); color: #e9d5ff;
+  border: 1px solid rgba(167,139,250,0.4); padding: 5px 10px;
+  border-radius: 6px; cursor: pointer; font-size: 11px;
+  backdrop-filter: blur(4px);
+}
+#snap-btn:hover { background: rgba(124,58,237,0.9); }
+</style>
+</head>
+<body>
+<div id="loading">加载中…</div>
+<canvas id="c"></canvas>
+<button id="snap-btn" onclick="takeSnapshot()">📷</button>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+
+// ── 桌面版 pose 基准（直接从 desktop/renderer/app.js 搬过来） ───
+// Z 轴控制上下：负值=左臂下垂，正值=右臂下垂
+const POSE = {
+  lArmX: 0.10, lArmY: 0.0, lArmZ: -1.25,
+  rArmX: 0.10, rArmY: 0.0, rArmZ:  1.25,
+  lForeX: 0.0, lForeZ: -0.3,
+  rForeX: 0.0, rForeZ:  0.3,
+};
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setClearColor(0xfdf9fb, 1);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(25, 1, 0.1, 100);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.enablePan = false;
+controls.enableZoom = false;
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 1.35);
+sun.position.set(1.5, 3, 2); scene.add(sun);
+const fill = new THREE.DirectionalLight(0xeef4ff, 0.55);
+fill.position.set(-2, 1, -1); scene.add(fill);
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── Idle 动画（桌面版 updateIdle 精简移植） ───────────────────
+function sw(t, f, a, p = 0) { return Math.sin(t * f + p) * a; }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+
+let blinkState = 'wait', blinkT = 0, blinkWait = rnd(3, 7);
+
+function updateBlink(dt) {
+  if (!vrm?.expressionManager) return;
+  switch (blinkState) {
+    case 'wait':
+      if ((blinkWait -= dt) <= 0) { blinkState = 'closing'; blinkT = 0; } break;
+    case 'closing':
+      vrm.expressionManager.setValue('blink', Math.min((blinkT += dt / 0.07), 1));
+      if (blinkT >= 1) { blinkState = 'opening'; blinkT = 0; } break;
+    case 'opening':
+      vrm.expressionManager.setValue('blink', Math.max(1 - (blinkT += dt / 0.12), 0));
+      if (blinkT >= 1) {
+        vrm.expressionManager.setValue('blink', 0);
+        blinkState = 'wait'; blinkWait = rnd(3, 7);
+      } break;
+  }
+}
+
+function updateIdle(t, dt) {
+  if (!vrm?.humanoid) return;
+  const get = name => vrm.humanoid.getNormalizedBoneNode(name);
+
+  const breath     = sw(t, 0.78, 0.013) + sw(t, 1.56, 0.003, 0.4) + sw(t, 0.31, 0.005, 1.2);
+  const bodyLeanZ  = sw(t, 0.13, 0.010) + sw(t, 0.07, 0.005, 2.1);
+  const bodyLeanX  = sw(t, 0.11, 0.007, 1.0);
+  const breathArmZ = breath * 0.35;
+
+  const spine = get('spine');
+  if (spine) { spine.rotation.x = breath + bodyLeanX; spine.rotation.z = sw(t, 0.22, 0.006, 0.8) + bodyLeanZ; }
+  const chest = get('chest');
+  if (chest) chest.rotation.x = breath * 0.55;
+
+  const head = get('head');
+  if (head) head.rotation.z = sw(t, 0.32, 0.013, 0.5) + sw(t, 0.85, 0.004);
+
+  const lArm = get('leftUpperArm');
+  if (lArm) { lArm.rotation.x = POSE.lArmX; lArm.rotation.y = POSE.lArmY; lArm.rotation.z = POSE.lArmZ + breathArmZ; }
+  const rArm = get('rightUpperArm');
+  if (rArm) { rArm.rotation.x = POSE.rArmX; rArm.rotation.y = POSE.rArmY; rArm.rotation.z = POSE.rArmZ - breathArmZ; }
+
+  const lFore = get('leftLowerArm');
+  if (lFore) { lFore.rotation.x = POSE.lForeX + breath * 0.08; lFore.rotation.z = POSE.lForeZ; }
+  const rFore = get('rightLowerArm');
+  if (rFore) { rFore.rotation.x = POSE.rForeX + breath * 0.08; rFore.rotation.z = POSE.rForeZ; }
+
+  const hips = get('hips');
+  if (hips) {
+    const ws = sw(t, 0.17, 0.009, 0.3) + sw(t, 0.08, 0.004, 1.8);
+    hips.rotation.z = ws;
+    hips.position.x = ws * 0.025;
+    hips.position.y = sw(t, 0.78, 0.003) + sw(t, 1.56, 0.001, 0.4);
+  }
+}
+
+// ── VRM 加载 ──────────────────────────────────────────────────
+let vrm = null;
+const loader = new GLTFLoader();
+loader.register(p => new VRMLoaderPlugin(p));
+
+loader.load(
+  '/model/vrm',
+  gltf => {
+    vrm = gltf.userData.vrm;
+    if (vrm.meta?.metaVersion === '0' || !vrm.meta?.metaVersion) VRMUtils.rotateVRM0(vrm);
+
+    // Apply arm pose BEFORE measuring bounding box so camera fits the displayed pose,
+    // not the T-pose (arms spread wide = bounding box too wide → camera too far back)
+    const h = vrm.humanoid;
+    const _get = n => h.getNormalizedBoneNode(n);
+    const _lArm = _get('leftUpperArm'),  _rArm = _get('rightUpperArm');
+    const _lFore = _get('leftLowerArm'), _rFore = _get('rightLowerArm');
+    if (_lArm)  { _lArm.rotation.x = POSE.lArmX;  _lArm.rotation.y = POSE.lArmY;  _lArm.rotation.z = POSE.lArmZ; }
+    if (_rArm)  { _rArm.rotation.x = POSE.rArmX;  _rArm.rotation.y = POSE.rArmY;  _rArm.rotation.z = POSE.rArmZ; }
+    if (_lFore) { _lFore.rotation.x = POSE.lForeX; _lFore.rotation.z = POSE.lForeZ; }
+    if (_rFore) { _rFore.rotation.x = POSE.rForeX; _rFore.rotation.z = POSE.rForeZ; }
+    vrm.update(0);
+
+    // Center and ground using arm-down bounding box
+    const box0 = new THREE.Box3().setFromObject(vrm.scene);
+    vrm.scene.position.x -= (box0.max.x + box0.min.x) / 2;
+    vrm.scene.position.y -= box0.min.y;
+
+    const box = new THREE.Box3().setFromObject(vrm.scene);
+    const modelH = box.max.y - box.min.y;
+    const modelW = box.max.x - box.min.x;
+
+    // Full-body fit distance, then halve it → 2× apparent size
+    const fovV = camera.fov * Math.PI / 180;
+    const fovH = 2 * Math.atan(Math.tan(fovV / 2) * camera.aspect);
+    const fitZV_full = (modelH / 2 * 1.15) / Math.tan(fovV / 2);
+    const fitZH_full = (modelW / 2 * 1.15) / Math.tan(fovH / 2);
+    const fitZ = Math.max(fitZV_full, fitZH_full) / 1.1;
+
+    // Camera shifted down so lower body is visible
+    const lookY = modelH * -0.1;
+    const camY  = lookY;   // camera level with target → keeps phi = π/2
+
+    camera.position.set(0, camY, fitZ);
+    camera.lookAt(0, lookY, 0);
+    controls.target.set(0, lookY, 0);
+
+    // Lock to yaw-only: compute actual polar angle and fix it
+    const dy = camera.position.y - controls.target.y;
+    const dh = Math.sqrt(camera.position.x ** 2 + camera.position.z ** 2);
+    const phi = Math.atan2(dh, dy);
+    controls.minPolarAngle = phi;
+    controls.maxPolarAngle = phi;
+    controls.minDistance   = fitZ;
+    controls.maxDistance   = fitZ;
+    controls.update();
+
+    scene.add(vrm.scene);
+    document.getElementById('loading').style.display = 'none';
+  },
+  xhr => {
+    if (xhr.total) {
+      const el = document.getElementById('loading');
+      if (el) el.textContent = `加载中 ${Math.round(xhr.loaded / xhr.total * 100)}%`;
+    }
+  },
+  err => {
+    const el = document.getElementById('loading');
+    if (el) el.textContent = '加载失败: ' + (err.message || String(err));
+  }
+);
+
+// ── 渲染循环 ─────────────────────────────────────────────────
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  const t  = clock.getElapsedTime();
+  if (vrm) {
+    updateIdle(t, dt);
+    updateBlink(dt);
+    vrm.update(dt);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.takeSnapshot = function() {
+  renderer.render(scene, camera);
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = 'yuki_snapshot.png';
+  a.click();
+};
+</script>
+</body>
+</html>

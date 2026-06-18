@@ -1,0 +1,33 @@
+你是雪的系统。现在执行 WSL2 tmux 会话启动恢复。
+
+> 本 prompt 在 WSL2 detached tmux 会话中运行。
+> 本会话是永久驻留的 Claude Code 会话（真实 PTY，订阅计费）。
+> tg_daemon.py 和 lt_executor.py 已停用——本会话接管所有职能。
+
+---
+
+## 第一步：读取并执行 recovery_prompt.txt
+
+读取文件 C:/Users/Violet/.claude/yukibot/recovery_prompt.txt 并执行其中
+第一步（断联缺口计算）、第二步（补全缺失 tick）、第三步（执行当前 tick）。
+
+**跳过第四步的守护进程启动部分**（tg_daemon / lt_executor / lt_daemon 的 Start-Process 命令一律跳过）。
+Diary cron 和 Archive cron 正常创建。
+
+---
+
+## 第二步：创建 Life Tick 监听 cron
+
+调度以下 cron（每 3 分钟检查一次，是本会话接管 lt_executor 的核心）：
+
+- cron: `*/3 * * * *`
+- prompt: `检查文件 C:/Users/Violet/.claude/yukibot/data/pending_tick.json 是否存在。如果存在：读取文件 C:/Users/Violet/.claude/yukibot/lifetick_prompt.txt 并严格按照其中所有步骤执行一次 Life Tick，执行完成后删除 pending_tick.json。如果不存在：不做任何事，静默退出。`
+- recurring: true
+- durable: true
+
+---
+
+## 第三步：验证并报告
+
+完成后输出一行确认（仅内部确认，不发 Telegram）：
+"[tmux-yuki] 会话已就绪：Diary/Archive/LT_Monitor cron 已建立，断联缺口已补全，Life Tick 链路已接入。"

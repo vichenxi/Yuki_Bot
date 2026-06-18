@@ -1,7 +1,6 @@
 @echo off
-set "GPTSOVITS_DIR=F:\BaiduNetdiskDownload\GPT-SoVITS\GPT-SoVITS-v2pro-20250604"
+set "GPTSOVITS_DIR=F:\GPT-SoVITS-v2pro-20250604"
 cd /d "%GPTSOVITS_DIR%"
-set "PATH=%GPTSOVITS_DIR%\runtime;%PATH%"
 
 echo [Yuki Voice API] Starting GPT-SoVITS API server on port 9880...
 echo Model weights will be loaded on first synthesis call.

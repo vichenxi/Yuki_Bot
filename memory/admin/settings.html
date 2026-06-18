@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>雪 · 设置</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", sans-serif;
+    background: #fdf9fb; color: #1f1a26; min-height: 100vh; padding: 32px 24px;
+  }
+  h1 { font-size: 22px; font-weight: 600; margin-bottom: 6px; color: #1f1a26; }
+  .subtitle { font-size: 13px; color: #888; margin-bottom: 32px; }
+  .back { font-size: 13px; color: #b04572; text-decoration: none; display: inline-block; margin-bottom: 20px; }
+  .back:hover { text-decoration: underline; }
+
+  .section {
+    background: #fff; border-radius: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    padding: 24px 28px; margin-bottom: 22px; max-width: 720px;
+  }
+  .section-title {
+    font-size: 13px; font-weight: 600; color: #b04572;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 18px;
+  }
+  .field { margin-bottom: 18px; }
+  .field:last-child { margin-bottom: 0; }
+  label { display: block; font-size: 13px; color: #666; margin-bottom: 5px; }
+  input[type=text], select {
+    width: 100%; padding: 9px 12px; border: 1.5px solid #e8dde8;
+    border-radius: 8px; font-size: 14px; color: #1f1a26;
+    background: #fdf9fb; transition: border-color 0.15s;
+    outline: none;
+  }
+  input[type=text]:focus, select:focus { border-color: #b04572; }
+  textarea {
+    width: 100%; padding: 9px 12px; border: 1.5px solid #e8dde8;
+    border-radius: 8px; font-size: 14px; color: #1f1a26;
+    background: #fdf9fb; transition: border-color 0.15s;
+    outline: none; resize: vertical; min-height: 72px; font-family: inherit;
+  }
+  textarea:focus { border-color: #b04572; }
+
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 20px; }
+  button {
+    padding: 9px 20px; border-radius: 8px; border: none;
+    font-size: 14px; font-weight: 500; cursor: pointer; transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.82; }
+  .btn-primary { background: #b04572; color: #fff; }
+  .btn-secondary { background: #f0e8f0; color: #6a2a4a; }
+  .btn-test { background: #e8f5e9; color: #2e7d32; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .status-dot {
+    display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+    margin-right: 6px; vertical-align: middle;
+  }
+  .dot-online { background: #4caf50; }
+  .dot-offline { background: #e53935; }
+  .dot-checking { background: #ff9800; }
+
+  .status-badge {
+    font-size: 13px; padding: 5px 12px; border-radius: 20px;
+    display: inline-flex; align-items: center;
+  }
+  .badge-online { background: #e8f5e9; color: #2e7d32; }
+  .badge-offline { background: #ffebee; color: #c62828; }
+
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: #1f1a26; color: #fff; padding: 10px 18px;
+    border-radius: 10px; font-size: 14px; opacity: 0;
+    transition: opacity 0.25s; pointer-events: none; z-index: 9999;
+  }
+  .toast.show { opacity: 1; }
+
+  audio { width: 100%; margin-top: 12px; border-radius: 8px; }
+  .saving { font-size: 12px; color: #888; margin-left: 8px; }
+
+  .weight-result {
+    font-size: 12px; color: #888; margin-top: 6px; font-family: monospace;
+  }
+</style>
+</head>
+<body>
+
+<a href="/" class="back">← 返回记忆面板</a>
+<h1>雪 · 系统设置</h1>
+<p class="subtitle">语音合成 / 机器人配置</p>
+
+<!-- Voice API Status -->
+<div class="section">
+  <div class="section-title">语音 API 状态</div>
+  <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+    <span id="apiStatus" class="status-badge badge-offline">
+      <span class="status-dot dot-checking"></span>检测中...
+    </span>
+    <span id="apiUrl" style="font-size:13px;color:#999;"></span>
+    <button class="btn-secondary" onclick="checkStatus()" style="padding:6px 14px;font-size:13px;">刷新</button>
+  </div>
+</div>
+
+<!-- Voice Model -->
+<div class="section">
+  <div class="section-title">语音模型</div>
+
+  <div class="field">
+    <label>GPT 权重路径 (.ckpt)</label>
+    <input type="text" id="gpt_model_path" placeholder="F:\GPT-SoVITS-...\GPT_weights_v2ProPlus\*.ckpt">
+  </div>
+  <div class="field">
+    <label>SoVITS 权重路径 (.pth)</label>
+    <input type="text" id="sovits_model_path" placeholder="F:\GPT-SoVITS-...\SoVITS_weights_v2ProPlus\*.pth">
+  </div>
+  <div class="field">
+    <label>参考音频路径 (.wav)</label>
+    <input type="text" id="ref_audio_path" placeholder="F:\...\ref.wav">
+  </div>
+  <div class="field">
+    <label>参考音频文本</label>
+    <textarea id="ref_text" rows="2" placeholder="参考音频里说的内容"></textarea>
+  </div>
+  <div class="field">
+    <label>合成语言</label>
+    <select id="voice_lang">
+      <option value="zh">中文 (zh)</option>
+      <option value="ja">日文 (ja)</option>
+      <option value="en">英文 (en)</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <button class="btn-primary" onclick="saveAndApply()">保存并热切换权重</button>
+    <button class="btn-test" onclick="testVoice()">试听</button>
+    <span class="saving" id="saveStatus"></span>
+  </div>
+  <div class="weight-result" id="weightResult"></div>
+  <audio id="audioPlayer" controls style="display:none;"></audio>
+</div>
+
+<!-- API URL -->
+<div class="section">
+  <div class="section-title">API 配置</div>
+  <div class="field">
+    <label>GPT-SoVITS API 地址</label>
+    <input type="text" id="gptsovits_api" placeholder="http://127.0.0.1:9880">
+  </div>
+  <div class="row">
+    <button class="btn-secondary" onclick="saveField('gptsovits_api')">保存</button>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const BASE = '';
+
+function toast(msg, duration=2200) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration);
+}
+
+async function loadConfig() {
+  const res = await fetch(`${BASE}/bot-config`);
+  const data = await res.json();
+  for (const [key, info] of Object.entries(data)) {
+    const el = document.getElementById(key);
+    if (!el) continue;
+    if (el.tagName === 'SELECT') {
+      el.value = info.value;
+    } else {
+      el.value = info.value;
+    }
+  }
+}
+
+async function checkStatus() {
+  const badge = document.getElementById('apiStatus');
+  const urlEl = document.getElementById('apiUrl');
+  badge.className = 'status-badge badge-offline';
+  badge.innerHTML = '<span class="status-dot dot-checking"></span>检测中...';
+  try {
+    const res = await fetch(`${BASE}/bot-config/voice-status`);
+    const data = await res.json();
+    urlEl.textContent = data.api;
+    if (data.online) {
+      badge.className = 'status-badge badge-online';
+      badge.innerHTML = '<span class="status-dot dot-online"></span>在线';
+    } else {
+      badge.className = 'status-badge badge-offline';
+      badge.innerHTML = '<span class="status-dot dot-offline"></span>离线';
+    }
+  } catch(e) {
+    badge.innerHTML = '<span class="status-dot dot-offline"></span>检测失败';
+  }
+}
+
+async function saveField(key) {
+  const el = document.getElementById(key);
+  if (!el) return;
+  const value = el.value.trim();
+  const res = await fetch(`${BASE}/bot-config/${key}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({value})
+  });
+  const data = await res.json();
+  if (data.ok) toast(`${key} 已保存`);
+  else toast(`保存失败: ${JSON.stringify(data)}`);
+}
+
+async function saveAndApply() {
+  const keys = ['gpt_model_path','sovits_model_path','ref_audio_path','ref_text','voice_lang'];
+  const statusEl = document.getElementById('saveStatus');
+  const resultEl = document.getElementById('weightResult');
+  statusEl.textContent = '保存中...';
+  resultEl.textContent = '';
+
+  for (const key of keys) {
+    const el = document.getElementById(key);
+    if (!el) continue;
+    await fetch(`${BASE}/bot-config/${key}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({value: el.value.trim()})
+    });
+  }
+
+  statusEl.textContent = '切换权重中...';
+  try {
+    const res = await fetch(`${BASE}/bot-config/apply-weights`, {method:'POST'});
+    const data = await res.json();
+    const lines = Object.entries(data).map(([k,v]) => `${k}: ${v}`).join(' | ');
+    resultEl.textContent = lines;
+    statusEl.textContent = '';
+    toast('已保存并切换权重 ✓');
+  } catch(e) {
+    statusEl.textContent = '';
+    resultEl.textContent = `切换失败: ${e}`;
+    toast('配置已保存，权重切换失败（API可能离线）');
+  }
+}
+
+async function testVoice() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '合成中...';
+  const player = document.getElementById('audioPlayer');
+  player.style.display = 'none';
+  try {
+    const res = await fetch(`${BASE}/bot-config/test-voice`, {method:'POST'});
+    const data = await res.json();
+    if (data.ok) {
+      const blob = new Blob(
+        [Uint8Array.from(atob(data.audio_b64), c => c.charCodeAt(0))],
+        {type: 'audio/wav'}
+      );
+      player.src = URL.createObjectURL(blob);
+      player.style.display = 'block';
+      player.play();
+      toast(`合成成功 (${(data.size/1024).toFixed(1)} KB)`);
+    } else {
+      toast(`合成失败: ${data.error}`);
+    }
+  } catch(e) {
+    toast(`请求失败: ${e}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '试听';
+  }
+}
+
+// Init
+loadConfig();
+checkStatus();
+</script>
+</body>
+</html>

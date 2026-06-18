@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
 TZ8 = timezone(timedelta(hours=8))
-DB_PATH = Path(r"C:\Users\Violet\.claude\yukibot\data\memory.db")
+DB_PATH = Path(__file__).parent.parent / "data" / "memory.db"
 EMBED_MODEL = "BAAI/bge-small-zh-v1.5"
 
 DEFAULTS = {

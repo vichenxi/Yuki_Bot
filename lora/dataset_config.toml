@@ -1,0 +1,19 @@
+[general]
+shuffle_caption = true
+caption_extension = ".txt"
+keep_tokens = 1
+
+[[datasets]]
+resolution = 512
+batch_size = 2
+
+  [[datasets.subsets]]
+  image_dir = "F:/bot/data/yuki_lora/img/20_yukixue"
+  class_tokens = "yukixue"
+  num_repeats = 20
+
+  [[datasets.subsets]]
+  image_dir = "F:/bot/data/yuki_lora/reg/1_1girl"
+  class_tokens = "1girl"
+  num_repeats = 1
+  is_reg = true

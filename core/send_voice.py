@@ -12,14 +12,8 @@ import re
 import sys
 import tempfile
 import requests
-from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-CONFIG_PATH = str(BASE_DIR / "config.json")
-
-
-def _resolve(p):
-    return str((BASE_DIR / p).resolve()) if p and not os.path.isabs(p) else p
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
 VALID_EMOTIONS = {"neutral", "tender", "playful", "happy", "sad", "excited"}
 
@@ -100,10 +94,6 @@ def send_voice(raw_text: str, chat_id: str = None) -> dict:
 
     text, emotion = parse_emotion(raw_text)
     print(f"[send_voice] text={text!r} emotion={emotion}", file=sys.stderr)
-
-    cfg["gpt_model_path"] = _resolve(cfg["gpt_model_path"])
-    cfg["sovits_model_path"] = _resolve(cfg["sovits_model_path"])
-    cfg["ref_audio_path"] = _resolve(cfg["ref_audio_path"])
 
     audio_data = synthesize(text, cfg)
 

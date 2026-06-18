@@ -29,7 +29,8 @@ if sys.stdout is None or getattr(sys.stdout, 'encoding', 'utf-8').lower() != 'ut
 if sys.stderr is None or getattr(sys.stderr, 'encoding', 'utf-8').lower() != 'utf-8':
     sys.stderr = io.TextIOWrapper(open(os.devnull, 'wb'), encoding='utf-8')
 
-BASE             = Path(__file__).resolve().parent.parent
+BASE             = Path(__file__).resolve().parent.parent   # repo root
+CORE             = Path(__file__).resolve().parent          # core/ —— 同级脚本（handle_reply 等）
 DATA             = BASE / "data"
 CONFIG_PATH      = BASE / "config.json"
 PENDING_REPLY    = DATA / "pending_reply.json"
@@ -40,7 +41,8 @@ PID_FILE         = BASE / "tg_daemon.pid"
 POLL_TIMEOUT     = 30    # Telegram long-poll 等待秒数
 SIGNAL_TIMEOUT   = 120   # 等待 handle_reply.py 完成的最长秒数
 RETRY_INTERVAL   = 300   # 处理超时后重试间隔（秒）
-HANDLE_REPLY     = BASE / "core" / "handle_reply.py"
+BURST_WINDOW     = 2.5   # 秒：首条消息到达后等待同批次追加消息的窗口
+HANDLE_REPLY     = CORE / "handle_reply.py"
 
 CST = timezone(timedelta(hours=8))
 
@@ -100,20 +102,22 @@ def save_offset(offset: int):
     OFFSET_FILE.write_text(json.dumps({"offset": offset}), encoding="utf-8")
 
 
-def get_updates(token: str, offset: int) -> list:
+def get_updates(token: str, offset: int, poll_timeout: int = POLL_TIMEOUT) -> list:
     url = (
         f"https://api.telegram.org/bot{token}/getUpdates"
-        f"?offset={offset}&timeout={POLL_TIMEOUT}&allowed_updates=[\"message\"]"
+        f"?offset={offset}&timeout={poll_timeout}&allowed_updates=[\"message\"]"
     )
     try:
-        with urllib.request.urlopen(url, timeout=POLL_TIMEOUT + 10) as resp:
+        with urllib.request.urlopen(url, timeout=poll_timeout + 10) as resp:
             data = json.loads(resp.read())
             return data.get("result", [])
     except urllib.error.URLError as e:
         log(f"getUpdates 网络错误：{e}")
+        time.sleep(5)  # 避免 409/SSL 错误时立即高频重试
         return []
     except Exception as e:
         log(f"getUpdates 异常：{e}")
+        time.sleep(5)
         return []
 
 
@@ -202,9 +206,20 @@ def main():
         handle_proc = None   # 当前 handle_reply.py 子进程
         handle_start = 0.0   # 子进程启动时间（用于超时判断）
         msg_queue = []       # handle_reply 运行期间收到的消息
+        burst_msgs: list = []     # burst 窗口积累的消息（尚未启动 handle_reply）
+        burst_deadline: float = 0.0  # burst 触发时间点（0 = 无 burst）
 
         while True:
             try:
+                # ── 0. Burst 窗口到期：触发 handle_reply ────────────
+                if burst_deadline > 0 and time.time() >= burst_deadline:
+                    log(f"[burst] 窗口到期，聚合 {len(burst_msgs)} 条消息，启动 handle_reply")
+                    write_pending_reply(burst_msgs)
+                    burst_msgs = []
+                    burst_deadline = 0.0
+                    handle_proc = launch_handle_reply()
+                    handle_start = time.time()
+
                 # ── 1. 检查 handle_reply 子进程状态 ──────────────────
                 if handle_proc is not None:
                     retcode = handle_proc.poll()
@@ -221,21 +236,26 @@ def main():
                         log(f"[warn] handle_reply.py 超时（{SIGNAL_TIMEOUT}s），强制终止")
                         handle_proc.kill()
                         handle_proc = None
-                        log("[warn] pending_reply.json 保留，claude_monitor 兜底")
+                        log("[warn] pending_reply.json 保留，等待下次处理")
                         # 若有队列消息，合并进现有 pending 或新建
                         if msg_queue:
                             if not merge_into_pending(msg_queue):
                                 write_pending_reply(msg_queue)
                             msg_queue = []
 
-                # ── 2. 若 pending 存在但无子进程，重新启动 ────────────
-                if handle_proc is None and PENDING_REPLY.exists():
+                # ── 2. 若 pending 存在但无子进程（且无 burst），重新启动 ─
+                if handle_proc is None and burst_deadline == 0.0 and PENDING_REPLY.exists():
                     log("[pending_reply] 文件残留，重新启动 handle_reply...")
                     handle_proc = launch_handle_reply()
                     handle_start = time.time()
 
-                # ── 3. 轮询 Telegram ──────────────────────────────────
-                updates = get_updates(token, offset)
+                # ── 3. 轮询 Telegram（burst 期间缩短 timeout 保证及时触发）─
+                if burst_deadline > 0:
+                    remaining = max(1, int(burst_deadline - time.time()) + 1)
+                    poll_t = min(remaining, POLL_TIMEOUT)
+                else:
+                    poll_t = POLL_TIMEOUT
+                updates = get_updates(token, offset, poll_t)
 
                 if not updates:
                     continue  # long-poll 超时，无新消息，直接重试
@@ -295,11 +315,17 @@ def main():
                     msg_queue.extend(new_messages)
                     merge_into_pending(new_messages)
                     log(f"[handle] handle_reply 运行中，{len(new_messages)} 条入队（队列共 {len(msg_queue)} 条）")
+                elif burst_deadline > 0:
+                    # burst 窗口积累中：追加消息，不重置 deadline
+                    burst_msgs.extend(new_messages)
+                    log(f"[burst] burst 中追加 {len(new_messages)} 条（共 {len(burst_msgs)} 条）")
                 else:
-                    # 无运行中的处理器：直接写文件并启动
-                    all_msgs = new_messages + msg_queue
+                    # 无运行中的处理器、无 burst：开启 burst 窗口
+                    burst_msgs = new_messages + msg_queue
                     msg_queue = []
-                    write_pending_reply(all_msgs)
+                    burst_deadline = time.time() + BURST_WINDOW
+                    log(f"[burst] {len(burst_msgs)} 条消息，burst 窗口 {BURST_WINDOW}s，到期后启动 handle_reply")
+                    # 注意：不在此处写 pending_reply.json 也不启动 handle_reply
                     handle_proc = launch_handle_reply()
                     handle_start = time.time()
 

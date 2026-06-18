@@ -1,0 +1,434 @@
+:root {
+  --bg:         #0d0d14;
+  --panel:      #11111c;
+  --sidebar:    #0e0e19;
+  --border:     #1e1e2e;
+  --border2:    #2a2a3e;
+  --text:       #d4d4e4;
+  --text2:      #5a5a7a;
+  --accent:     #4a9eff;
+  --accent-dim: #1a3060;
+  --green:      #6fdf5a;
+  --danger:     #ff4a6e;
+  --active-bg:  #192040;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: 11px/1.35 'Segoe UI', 'SF Pro Text', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Toolbar ──────────────────────────────────────────────── */
+#toolbar {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 10px;
+  background: #07070f;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.app-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.12em;
+  flex-shrink: 0;
+}
+
+.tb-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border2);
+  margin: 0 5px;
+  flex-shrink: 0;
+}
+
+.spacer { flex: 1; min-width: 8px; }
+
+/* Toolbar buttons */
+.tb-btn {
+  padding: 3px 9px;
+  font: 10px/1 'Segoe UI', sans-serif;
+  font-weight: 500;
+  background: #101020;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text2);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color 0.1s, border-color 0.1s;
+}
+.tb-btn:hover { color: var(--text); border-color: var(--border2); }
+.tb-btn:disabled { opacity: 0.28; cursor: default; pointer-events: none; }
+.tb-btn.accent { color: var(--green); border-color: #2a5a20; }
+.tb-btn.accent:hover { background: #141f10; }
+
+/* Tab switcher */
+.tab-btn {
+  padding: 4px 11px;
+  font: 10px/1 'Segoe UI', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--text2);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tab-btn:hover { color: var(--text); background: #141422; }
+.tab-btn.active { color: var(--accent); background: var(--active-bg); }
+
+/* Preset save row */
+.preset-save-row { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+
+#preset-name-input {
+  width: 120px;
+  padding: 3px 8px;
+  background: #0a0a18;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+  font: 10px 'Segoe UI', sans-serif;
+}
+#preset-name-input:focus { outline: none; border-color: var(--accent); }
+#preset-name-input::placeholder { color: var(--text2); }
+
+/* ── Main layout ──────────────────────────────────────────── */
+#main {
+  display: flex;
+  height: calc(100% - 36px);
+  overflow: hidden;
+}
+
+/* ── Body-part nav ────────────────────────────────────────── */
+#part-nav {
+  width: 50px;
+  min-width: 50px;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 5px 4px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.part-btn {
+  width: 100%;
+  padding: 7px 1px;
+  font: 9px/1.2 'Segoe UI', sans-serif;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.03em;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.part-btn:hover { color: var(--text); background: #141428; }
+.part-btn.active {
+  color: var(--accent);
+  background: var(--active-bg);
+  border-color: var(--accent-dim);
+}
+
+/* ── Viewport ─────────────────────────────────────────────── */
+#viewport-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#canvas {
+  flex: 1;
+  display: block;
+  width: 100%;
+  min-height: 0;
+}
+
+/* ── Preset strip ─────────────────────────────────────────── */
+#preset-strip {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  background: #08080f;
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+#preset-strip::-webkit-scrollbar { height: 2px; }
+#preset-strip::-webkit-scrollbar-thumb { background: var(--border2); }
+
+.strip-label {
+  font: 700 9px 'Segoe UI', sans-serif;
+  letter-spacing: 0.1em;
+  color: var(--text2);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.preset-chip {
+  padding: 2px 9px;
+  font: 10px 'Segoe UI', sans-serif;
+  background: #12121e;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.1s;
+}
+.preset-chip:hover { background: var(--active-bg); border-color: var(--accent-dim); color: var(--accent); }
+
+/* ── Property panel ───────────────────────────────────────── */
+#prop-panel {
+  width: 308px;
+  min-width: 308px;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* Section headers */
+.part-hdr {
+  padding: 6px 10px 5px;
+  font: 700 9px/1 'Segoe UI', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  background: #09091a;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  flex-shrink: 0;
+}
+
+/* ── Joint section ────────────────────────────────────────── */
+.joint-sec {
+  padding: 5px 10px 5px;
+  border-bottom: 1px solid var(--border);
+}
+
+.joint-hdr {
+  display: flex;
+  align-items: center;
+  margin-bottom: 3px;
+}
+.joint-lbl {
+  flex: 1;
+  font: 600 10px 'Segoe UI', sans-serif;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.joint-rst {
+  width: 17px; height: 17px;
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--text2);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; line-height: 1;
+  flex-shrink: 0;
+}
+.joint-rst:hover { color: var(--accent); border-color: var(--border2); }
+
+/* ── Axis row ─────────────────────────────────────────────── */
+.axis-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 2px;
+}
+.ax-lbl {
+  width: 11px;
+  font: 700 9px 'Segoe UI', sans-serif;
+  color: #354060;
+  flex-shrink: 0;
+  text-align: center;
+}
+.axis-row input[type=range] {
+  flex: 1;
+  height: 3px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  min-width: 0;
+}
+.axis-val {
+  width: 36px;
+  text-align: right;
+  font: 10px/1 'Consolas', monospace;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* number input replaces the value span */
+.num-input {
+  width: 52px;
+  padding: 1px 5px 1px 3px;
+  background: #08081a;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--accent);
+  font: 10px/1.4 'Consolas', monospace;
+  text-align: right;
+  flex-shrink: 0;
+  transition: border-color 0.1s;
+}
+.num-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: #0c0c22;
+}
+.num-input::-webkit-outer-spin-button,
+.num-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.num-input[type=number] { -moz-appearance: textfield; }
+
+/* Expression label (wider) */
+.ax-lbl.expr-lbl {
+  width: 90px;
+  font: 10px 'Segoe UI', sans-serif;
+  font-weight: 400;
+  color: var(--text2);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.axis-row input[type=range].expr-range {
+  accent-color: #9f7aff;
+}
+
+/* ── Fingers ──────────────────────────────────────────────── */
+.fingers-divider {
+  padding: 4px 10px 3px;
+  font: 700 9px 'Segoe UI', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text2);
+  background: #0c0c1a;
+  border-bottom: 1px solid var(--border);
+}
+
+.finger-sec { border-bottom: 1px solid var(--border); }
+
+.finger-hdr {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #0e0e1c;
+}
+.finger-toggle {
+  font-size: 8px;
+  width: 14px; height: 14px;
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  cursor: pointer;
+  padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.finger-toggle:hover { color: var(--text); }
+.finger-lbl {
+  font: 600 10px 'Segoe UI', sans-serif;
+  color: var(--text);
+  width: 46px;
+  flex-shrink: 0;
+}
+.curl-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.curl-wrap input[type=range] {
+  flex: 1;
+  height: 3px;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+
+.finger-detail { background: #0b0b18; padding-bottom: 2px; }
+.finger-detail .joint-sec {
+  padding: 3px 8px 3px 22px;
+  border-bottom: 1px solid #17172a;
+}
+.finger-detail .joint-lbl { font-size: 9px; color: var(--text2); font-weight: 400; }
+.finger-detail .joint-rst { width: 14px; height: 14px; font-size: 10px; }
+.finger-detail .axis-row { margin-bottom: 1px; }
+.finger-detail .ax-lbl { color: #283048; }
+
+.hidden { display: none !important; }
+
+/* ── Preset tab items ─────────────────────────────────────── */
+.preset-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.preset-item:hover { background: #13131f; }
+
+.preset-name {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-sm {
+  padding: 2px 7px;
+  font: 9px 'Segoe UI', sans-serif;
+  font-weight: 500;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+.btn-sm.blue { background: #112030; border-color: #1a4070; color: var(--accent); }
+.btn-sm.blue:hover { background: #16283a; }
+.btn-sm.red  { background: #200f18; border-color: #601030; color: var(--danger); }
+.btn-sm.red:hover  { background: #2a1520; }
+
+.empty-hint {
+  padding: 18px 10px;
+  font-size: 10px;
+  color: var(--text2);
+  text-align: center;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #22223a; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #32324a; }

@@ -1,15 +1,15 @@
-﻿现在是北京时间午夜，需要将昨天的对话记录归档。
+现在是北京时间午夜，需要将昨天的对话记录归档。
 
 ## 步骤
 
-1. 读取 `YUKIBOT_ROOT_PLACEHOLDER/data/full_archive.json`
+1. 读取 `{{ROOT}}/data/full_archive.json`
 
 2. 计算昨天的日期（北京时间 UTC+8，当前是午夜 00:00，所以昨天 = 今天减一天），格式 YYYY-MM-DD
 
 3. 从 full_archive.json 中筛选出所有 ts 字段包含昨天日期的条目
 
 4. 将这些条目写入归档文件：
-   路径：`YUKIBOT_ROOT_PLACEHOLDER/data/full_archive_<昨天日期>.json`
+   路径：`{{ROOT}}/data/full_archive_<昨天日期>.json`
    格式：JSON 数组，内容与原条目完全一致
 
 5. 将 full_archive.json 更新为只保留今天（即当前午夜起始日期，北京时间）的条目

@@ -8,7 +8,7 @@ import sys
 import os
 
 PROMPT = (
-    "用 mcp__plugin_telegram_telegram__reply 工具向 chat_id 8517561157 "
+    "用 mcp__plugin_telegram_telegram__reply 工具向 chat_id YOUR_CHAT_ID "
     "发送消息「lt daemon 连通性测试，可忽略」，然后输出「test_ok」。"
 )
 
